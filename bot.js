@@ -878,7 +878,32 @@ function generateMarkov(words, brain) {
 
     return outputText;
 }
+/**
+ * 南鳥島の天気を取得する関数
+ */
+async function getMinamitorishimaWeather() {
+    try {
+        // 南鳥島の座標を指定 (Open-Meteo API)
+        const url = "https://api.open-meteo.com/v1/forecast?latitude=24.28&longitude=153.98&current_weather=true&timezone=Asia%2FTokyo";
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        // 天気コードを日本語に変換（簡易版）
+        const code = data.current_weather.weathercode;
+        let weatherStr = "不明";
+        if (code === 0) weatherStr = "快晴";
+        else if (code <= 3) weatherStr = "晴れ";
+        else if (code <= 67) weatherStr = "雨";
+        else if (code <= 77) weatherStr = "雪";
+        else weatherStr = "曇り";
 
+        const temp = Math.round(data.current_weather.temperature);
+        return `【南鳥島: ${weatherStr} / ${temp}℃】`;
+    } catch (e) {
+        console.error("天気取得失敗:", e);
+        return ""; // 失敗したら空文字を返して、投稿に影響させない
+    }
+}
 // ================================
 // 🚀 メイン処理 (完全統合版)
 // ================================
@@ -984,6 +1009,22 @@ async function main() {
             if (retryCount > 0) console.log(`再生成試行中... (${retryCount}回目)`);
             outputText = generateMarkov(words, brain);
             retryCount++;
+        }
+        // ========================
+        // 🌡 南鳥島チャンス (20%)
+        // ========================
+        if (Math.random() < 2) { 
+            console.log("🌊 南鳥島イベント発生！");
+            const weatherInfo = await getMinamitorishimaWeather();
+            
+            if (weatherInfo && outputText.length > 2) {
+                // 文中のどこかにランダムに差し込む
+                const insertPos = Math.floor(Math.random() * outputText.length);
+                outputText = 
+                    outputText.slice(0, insertPos) + 
+                    weatherInfo + 
+                    outputText.slice(insertPos);
+            }
         }
         // 10. 📤 Misskeyへ最終投稿 (絶縁版)
         console.log("👉 Misskeyに最終投稿します...");
