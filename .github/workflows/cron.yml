@@ -1,0 +1,51 @@
+name: Misskey Bot JS Cron
+concurrency:
+  group: bot-group
+  cancel-in-progress: true
+
+on:
+  repository_dispatch:
+    types: [a_bot]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies (Force Update)
+        # @latest を指定し、package-lockを無視して最新を入れ直します
+        run: |
+          npm install @google/generative-ai@0.21.0 misskey-js@latest axios
+      - name: Install dependencies
+        run: npm install
+      - name: Run bot
+        env:
+          GDRIVE_SERVICE_ACCOUNT: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
+          GDRIVE_FILE_ID: ${{ secrets.GDRIVE_FILE_ID }}
+          MK_DOMAIN: ${{ secrets.MK_DOMAIN }}
+          MK_TOKEN: ${{ secrets.MK_TOKEN }}
+          MK_TOKEN_ID: ${{ secrets.MK_TOKEN_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY_SUB: ${{ secrets.GEMINI_API_KEY_SUB }}
+        run: |
+          # 1. Secretが空でないか改めて確認
+          if [ -z "$GDRIVE_SERVICE_ACCOUNT" ]; then 
+            echo "Error: GDRIVE_SERVICE_ACCOUNT is still empty!"
+            exit 1
+          fi
+          
+          # 2. JSONファイルを作成
+          cat << 'EOF' > credentials.json
+          ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
+          EOF
+          
+          # 3. 実行
+          node bot.js
