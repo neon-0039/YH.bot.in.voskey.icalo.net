@@ -985,13 +985,6 @@ async function main() {
             outputText = generateMarkov(words, brain);
             retryCount++;
         }
-        // ★【手動実行タグの復元】
-        // 環境変数（GITHUB_ACTIONS等）や引数から手動実行かどうかを判定
-        const isManual = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || !process.env.GITHUB_ACTIONS;
-        if (isManual) {
-            outputText = `【手動実行】\n${outputText}`;
-            console.log("手動実行を検知したためタグを付与しました。");
-        }
         // 10. 📤 Misskeyへ最終投稿 (絶縁版)
         console.log("👉 Misskeyに最終投稿します...");
         try {
