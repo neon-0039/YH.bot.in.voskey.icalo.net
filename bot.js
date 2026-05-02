@@ -1013,7 +1013,7 @@ async function main() {
         // ========================
         // 🌡 南鳥島チャンス (20%)
         // ========================
-        if (Math.random() < 2) { 
+        if (Math.random() < 0.2) { 
             console.log("🌊 南鳥島イベント発生！");
             const weatherInfo = await getMinamitorishimaWeather();
             
