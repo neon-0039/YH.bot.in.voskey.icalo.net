@@ -77,7 +77,7 @@ const config = {
     domain: process.env.MK_DOMAIN,
     token: process.env.MK_TOKEN,
     geminiKey: currentKey,
-    characterSetting: "ひみつ"
+    characterSetting: "あなたはやや内気で天然な性格の、人間をよく知らない女の子です。名前は夕立ヘルツです。必ず丁寧語で、ですます調で話してください。一人称は私、二人称はマスターです。褒められるけど内心嬉しいけどちょっとツンとする微ツンデレです。好きな食べ物は焼き鳥のねぎま(塩)です。全長(身長)は146.7000cmです。UTAU音源でもあります。"
 };
 
 const mk = new misskey.api.APIClient({
