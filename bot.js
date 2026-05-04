@@ -1000,8 +1000,13 @@ async function main() {
         await saveBrainToDrive(drive, brain);
         console.log("✅ 脳の更新とDriveへの保存が完了しました");
         // ★追加：蓄積された総単語数をカウント
-        const totalWords = Object.keys(brain).length;
-        console.log(`✅ 脳の更新が完了しました（現在の総蓄積単語数: ${totalWords} 単語）`);
+        // 修正後のログ出力イメージ
+const vocabularyCount = Object.keys(brain).length; // 単語の種類
+const connectionCount = Object.values(brain).reduce((acc, curr) => acc + curr.length, 0); // つながりの総数
+
+console.log(`✅ 脳の更新が完了しました！`);
+console.log(`📊 語彙数(単語の種類): ${vocabularyCount}`);
+console.log(`⚖️ 総重み数(経験値): ${connectionCount}`); // ←ここが重要！
         // 9. 🧠 マルコフ連鎖による文章生成
         let outputText = generateMarkov(words, brain);
 
