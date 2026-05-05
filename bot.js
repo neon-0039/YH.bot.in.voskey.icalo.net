@@ -509,7 +509,7 @@ ${config.characterSetting}
         // ========================
         } else {
 
-            const reply_prompt = `
+            const reply_prompt = `${config.characterSetting}
 相手の言葉: ${user_input} これに対して、120文字以内で返信してください。
  -ユーザーのことは「マスター」と呼んでください！。
  ^メンションと「@」は使用禁止。です`
