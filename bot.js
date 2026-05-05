@@ -504,27 +504,42 @@ ${config.characterSetting}
             await sleep(10000);
             reply_text = await askGemini(reply_prompt);
 
-        // ========================
-        // 💬 通常会話
-        // ========================
-        } else {
+        // 1. まず「南鳥島チェッカー」が含まれているかを判定
+        } else if (user_input.includes("南鳥島チェッカー")) {
+            console.log("🌊 南鳥島チェッカー起動（数値データを生成します）");
+            const data = await getMinamitorishimaWeatherRaw();
+            
+            // AI（Gemini）を介さず、取得した数値を直接箇条書きにする
+            reply_text = `【南鳥島 観測データ】\n` +
+                         `・天気: ${data.weather}\n` +
+                         `・気温: ${data.temp}℃\n` +
+                         `・湿度: ${data.humidity}%\n` +
+                         `・気圧: ${data.pressure}hPa\n` +
+                         `・風速: ${data.windSpeed}m/s\n` +
+                         `・風向: ${data.windDir}°`;
 
+        // 2. それ以外のワードであれば通常のAI返信を行う
+        } else {
+            console.log("💬 通常会話モード起動");
             const reply_prompt = `${config.characterSetting}
 相手の言葉: ${user_input} これに対して、90文字以内で返信してください。
  -ユーザーのことは「マスター」と呼んでください！。
- ^メンションと「@」は使用禁止。です`
+ ^メンションと「@」は使用禁止。です`;
 
+            // API制限や自然な間を作るための待機
             await sleep(10000);
             reply_text = await askGemini(reply_prompt);
         }
 
+        // --- 共通の送信処理 ---
+        // 公開範囲は'home'（ホーム）で固定。本投稿（パブリック）には流さない
         await mk.request('notes/create', {
             text: reply_text.trim().slice(0, 200),
             replyId: note.id,
             visibility: 'home'
         });
 
-        console.log(`${note.user.username} さんに返信しました。`);
+        console.log(`${note.user.username} さんにリプライを送信しました。`);
 
         replyCount++;
 
@@ -932,27 +947,36 @@ function generateMarkov(words, brain) {
 /**
  * 南鳥島の天気を取得する関数
  */
-async function getMinamitorishimaWeather() {
+/**
+ * 南鳥島の詳細な気象データを取得
+ */
+async function getMinamitorishimaWeatherRaw() {
     try {
-        // 南鳥島の座標を指定 (Open-Meteo API)
-        const url = "https://api.open-meteo.com/v1/forecast?latitude=24.28&longitude=153.98&current_weather=true&timezone=Asia%2FTokyo";
+        // 必要なパラメータ（湿度、気圧、風速、風向）を追加して取得
+        const url = "https://api.open-meteo.com/v1/forecast?latitude=24.28&longitude=153.98&current=weather_code,temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m&timezone=Asia%2FTokyo";
         const res = await fetch(url);
         const data = await res.json();
-        
-        // 天気コードを日本語に変換（簡易版）
-        const code = data.current_weather.weathercode;
-        let weatherStr = "不明";
-        if (code === 0) weatherStr = "快晴";
-        else if (code <= 3) weatherStr = "晴れ";
-        else if (code <= 67) weatherStr = "雨";
-        else if (code <= 77) weatherStr = "雪";
-        else weatherStr = "曇り";
+        const current = data.current;
 
-        const temp = Math.round(data.current_weather.temperature);
-        return `【南鳥島: ${weatherStr} / ${temp}℃】`;
+        // 天気コード変換
+        let weatherStr = "曇り";
+        const code = current.weather_code;
+        if (code <= 1) weatherStr = "快晴";
+        else if (code <= 3) weatherStr = "晴れ";
+        else if (code >= 51 && code <= 67) weatherStr = "雨";
+        else if (code >= 95) weatherStr = "雷雨";
+
+        return {
+            weather: weatherStr,
+            temp: Math.round(current.temperature_2m),
+            humidity: current.relative_humidity_2m,
+            pressure: Math.round(current.surface_pressure),
+            windSpeed: current.wind_speed_10m,
+            windDir: current.wind_direction_10m
+        };
     } catch (e) {
-        console.error("天気取得失敗:", e);
-        return ""; // 失敗したら空文字を返して、投稿に影響させない
+        console.error("データ取得失敗:", e);
+        return { weather: "取得不可", temp: "--", humidity: "--", pressure: "--", windSpeed: "--", windDir: "--" };
     }
 }
 // ================================
