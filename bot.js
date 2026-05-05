@@ -773,21 +773,22 @@ async function saveBrainToDrive(drive, brain) {
         console.error("❌ 例外発生:", e.message);
         return false;
     }
-}
-async function generateRailwayReport() {
-    // 鉄道運行情報を配信しているオープンなJSONソースなどを利用
-    // ここでは網羅性の高い公共交通系APIを想定したロジックを構築
+}async function generateRailwayReport() {
     const url = "https://tetsudo.rti-g.co.jp/free/tetsudo.json"; 
 
     try {
         const res = await fetch(url);
         const data = await res.json();
 
-        if (!data.tetsudo || data.tetsudo.length === 0) {
-            return null; // 遅延なし
+        // --- 1. 遅延情報が空、またはデータがない場合 ---
+        if (!data || !data.tetsudo || data.tetsudo.length === 0) {
+            return {
+                text: "【鉄道運行状況】全線、遅延なく運行中です。ですが、念のためテレビなどで一度調べることをお勧めします",
+                cw: null // CWなし
+            };
         }
 
-        // 地方ごとに整理（ユーザーが見やすいように）
+        // --- 2. 遅延がある場合 ---
         const regions = {};
         const affectedLines = [];
 
@@ -795,15 +796,12 @@ async function generateRailwayReport() {
             const region = info.company || "その他";
             if (!regions[region]) regions[region] = [];
             
-            // 「○○線: 列車遅延」といった形式
             regions[region].push(`${info.name}: ${info.lastText || "情報あり"}`);
             affectedLines.push(info.name);
         });
 
-        // CW（注釈）の作成
         const cw = `⚠️ 【運行情報】${affectedLines.slice(0, 5).join('、')}${affectedLines.length > 5 ? '...ほか' : ''}`;
 
-        // 本文の作成
         let text = "🚃 運行情報をお知らせします\n\n";
         for (const reg in regions) {
             text += `【${reg}】\n`;
@@ -812,9 +810,14 @@ async function generateRailwayReport() {
         text += "※情報は自動取得のため、最新の状況と異なる場合があります。";
 
         return { text, cw };
+
     } catch (e) {
         console.error("🚨 鉄道情報取得エラー:", e);
-        return null;
+        // エラー時も「不明」とするよりは、静かにしておくか「確認不可」と出す
+        return {
+            text: "⚠️ 鉄道運行情報の取得に失敗しました。最新の状況は公式情報をご確認ください。",
+            cw: null
+        };
     }
 }
 // ================================
@@ -1008,24 +1011,21 @@ async function main() {
         await handleFollowControl(my_id);
 
         // 5. 💬 メンション（返信）処理
-        await handleMentions(me);
-        // --- main関数内 ---
+        await handleMentions(me);// --- main関数内 ---
 const now = new Date(new Date().toLocaleString("ja-JP", {timeZone: "Asia/Tokyo"}));
 const hour = now.getHours();
 const min = now.getMinutes();
 
 // 1. 運行情報を投稿すべき時間か判定
-// 投稿を実行する条件フラグ
-let shouldCheckTrain = false;
+let shouldCheckRailway = false;
 
-// 1. ラッシュ時間帯（高頻度：全スロット実行）
-// 朝：6:10〜8:50 / 夕：17:10〜19:50
+// ラッシュ時間帯（6時, 7時, 8時 / 17時, 18時, 19時）は全スロット（10, 30, 50分）実行
 if ((hour >= 6 && hour <= 8) || (hour >= 17 && hour <= 19)) {
-    shouldCheckTrain = true;
+    shouldCheckRailway = true;
 } 
-// 2. 日中・深夜帯（低頻度：毎時10分のみ）
+// それ以外の時間帯は「毎時10分」のみ生存確認を兼ねて実行
 else if (min === 10) {
-    shouldCheckTrain = true;
+    shouldCheckRailway = true;
 }
 
 // 2. 実行
@@ -1036,15 +1036,13 @@ if (shouldCheckRailway) {
     if (railData) {
         await requestToMk('notes/create', {
             text: railData.text,
-            cw: railData.cw,
+            cw: railData.cw, // cwがnullならMisskey側で自動的にCWなし投稿になります
             visibility: "public"
         });
-        console.log("✅ 運行情報を投稿しました。");
+        console.log(`✅ 運行情報を投稿しました。（CW: ${railData.cw ? 'あり' : 'なし'}）`);
         
-        // 天気と同じく、投稿後に少し待機してからマルコフへ
+        // 4秒待機してマルコフ連鎖へ
         await new Promise(resolve => setTimeout(resolve, 4000));
-    } else {
-        console.log("🍃 遅延情報がないため投稿をスキップします。");
     }
 }
         // 6. 📝 定期投稿の準備
