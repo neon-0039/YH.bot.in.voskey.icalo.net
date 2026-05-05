@@ -1015,21 +1015,17 @@ const hour = now.getHours();
 const min = now.getMinutes();
 
 // 1. 運行情報を投稿すべき時間か判定
-let shouldCheckRailway = false;
+// 投稿を実行する条件フラグ
+let shouldCheckTrain = false;
 
-// 基本の2時間おき（偶数時の10分回に実行）
-if (hour % 2 === 0 && min === 10) {
-    shouldCheckRailway = true;
-}
-
-// 🚀 通勤ラッシュ（6:10〜8:50）
-if (hour >= 6 && hour <= 8) {
-    shouldCheckRailway = true; 
-}
-
-// 🚀 帰宅ラッシュ（17:10〜20:10）
-if (hour >= 17 && hour <= 20) {
-    shouldCheckRailway = true;
+// 1. ラッシュ時間帯（高頻度：全スロット実行）
+// 朝：6:10〜8:50 / 夕：17:10〜19:50
+if ((hour >= 6 && hour <= 8) || (hour >= 17 && hour <= 19)) {
+    shouldCheckTrain = true;
+} 
+// 2. 日中・深夜帯（低頻度：毎時10分のみ）
+else if (min === 10) {
+    shouldCheckTrain = true;
 }
 
 // 2. 実行
