@@ -789,7 +789,7 @@ async function saveBrainToDrive(drive, brain) {
         return false;
     }
 }async function generateRailwayReport() {
-    const url = "https://tetsudo.rti-g.co.jp/free/tetsudo.json"; 
+    const url = "https://tetsudo.rti-giken.jp/free/tetsudo.json"; 
 
     try {
         const res = await fetch(url);
