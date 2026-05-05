@@ -774,6 +774,49 @@ async function saveBrainToDrive(drive, brain) {
         return false;
     }
 }
+async function generateRailwayReport() {
+    // 鉄道運行情報を配信しているオープンなJSONソースなどを利用
+    // ここでは網羅性の高い公共交通系APIを想定したロジックを構築
+    const url = "https://tetsudo.rti-g.co.jp/free/tetsudo.json"; 
+
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (!data.tetsudo || data.tetsudo.length === 0) {
+            return null; // 遅延なし
+        }
+
+        // 地方ごとに整理（ユーザーが見やすいように）
+        const regions = {};
+        const affectedLines = [];
+
+        data.tetsudo.forEach(info => {
+            const region = info.company || "その他";
+            if (!regions[region]) regions[region] = [];
+            
+            // 「○○線: 列車遅延」といった形式
+            regions[region].push(`${info.name}: ${info.lastText || "情報あり"}`);
+            affectedLines.push(info.name);
+        });
+
+        // CW（注釈）の作成
+        const cw = `⚠️ 【運行情報】${affectedLines.slice(0, 5).join('、')}${affectedLines.length > 5 ? '...ほか' : ''}`;
+
+        // 本文の作成
+        let text = "🚃 運行情報をお知らせします\n\n";
+        for (const reg in regions) {
+            text += `【${reg}】\n`;
+            text += regions[reg].join('\n') + "\n\n";
+        }
+        text += "※情報は自動取得のため、最新の状況と異なる場合があります。";
+
+        return { text, cw };
+    } catch (e) {
+        console.error("🚨 鉄道情報取得エラー:", e);
+        return null;
+    }
+}
 // ================================
 // 🧠 マルコフ生成（進化版）
 // ================================
@@ -966,7 +1009,48 @@ async function main() {
 
         // 5. 💬 メンション（返信）処理
         await handleMentions(me);
+        // --- main関数内 ---
+const now = new Date(new Date().toLocaleString("ja-JP", {timeZone: "Asia/Tokyo"}));
+const hour = now.getHours();
+const min = now.getMinutes();
 
+// 1. 運行情報を投稿すべき時間か判定
+let shouldCheckRailway = false;
+
+// 基本の2時間おき（偶数時の10分回に実行）
+if (hour % 2 === 0 && min === 10) {
+    shouldCheckRailway = true;
+}
+
+// 🚀 通勤ラッシュ（6:10〜8:50）
+if (hour >= 6 && hour <= 8) {
+    shouldCheckRailway = true; 
+}
+
+// 🚀 帰宅ラッシュ（17:10〜20:10）
+if (hour >= 17 && hour <= 20) {
+    shouldCheckRailway = true;
+}
+
+// 2. 実行
+if (shouldCheckRailway) {
+    console.log("🚃 運行情報チェック開始...");
+    const railData = await generateRailwayReport();
+
+    if (railData) {
+        await requestToMk('notes/create', {
+            text: railData.text,
+            cw: railData.cw,
+            visibility: "public"
+        });
+        console.log("✅ 運行情報を投稿しました。");
+        
+        // 天気と同じく、投稿後に少し待機してからマルコフへ
+        await new Promise(resolve => setTimeout(resolve, 4000));
+    } else {
+        console.log("🍃 遅延情報がないため投稿をスキップします。");
+    }
+}
         // 6. 📝 定期投稿の準備
         console.log("定期投稿の準備を開始します...");
         await sleep(2000);
