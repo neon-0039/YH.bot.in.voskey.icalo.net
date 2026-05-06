@@ -788,55 +788,266 @@ async function saveBrainToDrive(drive, brain) {
         console.error("❌ 例外発生:", e.message);
         return false;
     }
-}
-async function generateRailwayReport() {
-    const url = "https://tetsudo.rti-giken.jp/free/tetsudo.json"; 
+}async function generateWeatherReport(mode) {
+    // 地点データ定義（地方ごとに配列を作成）
+const locations = {
+    "北海道": [
+        { name: "稚内市", lat: 45.41, lon: 141.67 },
+        { name: "知床(斜里町)", lat: 44.02, lon: 144.98 },
+        { name: "根室市", lat: 43.33, lon: 145.58 },
+        { name: "阿寒(釧路市)", lat: 43.43, lon: 144.09 },
+        { name: "ニセコ町", lat: 42.80, lon: 140.68 },
+        { name: "夕張市", lat: 43.05, lon: 141.97 },
+        { name: "日高町", lat: 42.48, lon: 142.07 },
+        { name: "札幌市", lat: 43.06, lon: 141.35 },
+        { name: "苫小牧市", lat: 42.63, lon: 141.60 },
+        { name: "函館市", lat: 41.76, lon: 140.72 },
+        { name: "択捉島", lat: 45.0, lon: 147.5 },
+        { name: "国後島", lat: 44.0, lon: 145.8 }
+    ],
+"樺太・千島列島": [
+        { name: "占守島", lat: 50.7, lon: 156.2 }, // 最北端
+        { name: "幌筵島(パラムシル)", lat: 50.1, lon: 155.3 }, // 北千島の中心
+        { name: "得撫島(ウルップ)", lat: 45.8, lon: 149.9 }, // 中千島
+        { name: "ユジノサハリンスク（旧:豊原）", lat: 46.95, lon: 142.73 }, // 樺太南部（旧豊原）
+        { name: "ホルムスク（旧:真岡）", lat: 47.05, lon: 142.04 }, // 樺太西岸（旧真岡）
+        { name: "ポロナイスク（旧:敷香）", lat: 49.22, lon: 143.11 }, // 樺太東岸（旧敷香）
+        { name: "アレクサンドロフスク", lat: 50.9, lon: 142.15 } // 樺太北部
+    ],
+    "東北": [
+        { name: "大間町", lat: 41.53, lon: 140.91 },
+        { name: "青森市", lat: 40.82, lon: 140.75 },
+        { name: "秋田市", lat: 39.72, lon: 140.10 },
+        { name: "盛岡市", lat: 39.70, lon: 141.15 },
+        { name: "平泉町", lat: 38.98, lon: 141.11 },
+        { name: "仙台市", lat: 38.27, lon: 140.87 },
+        { name: "三春町", lat: 37.44, lon: 140.48 },
+        { name: "山形市", lat: 38.25, lon: 140.33 },
+        { name: "郡山市", lat: 37.40, lon: 140.38 },
+        { name: "福島市", lat: 37.76, lon: 140.47 }
+    ],
+    "関東": [
+        { name: "日光市", lat: 36.75, lon: 139.61 },
+        { name: "日立市", lat: 36.60, lon: 140.65 },
+        { name: "水戸市", lat: 36.37, lon: 140.45 },
+        { name: "前橋市", lat: 36.38, lon: 139.06 },
+        { name: "宇都宮市", lat: 36.57, lon: 139.88 },
+        { name: "霞ヶ浦", lat: 36.08, lon: 140.20 },
+        { name: "大宮", lat: 35.91, lon: 139.63 },
+        { name: "成田市", lat: 35.78, lon: 140.31 },
+        { name: "千葉市", lat: 35.61, lon: 140.12 },
+        { name: "東京都", lat: 35.69, lon: 139.69 },
+        { name: "八王子市", lat: 35.66, lon: 139.33 },
+        { name: "横浜市", lat: 35.44, lon: 139.64 },
+        { name: "箱根町", lat: 35.23, lon: 139.10 },
+        { name: "館山市", lat: 34.99, lon: 139.86 }
+    ],
+    "甲信越": [
+        { name: "新潟市", lat: 37.92, lon: 139.05 },
+        { name: "佐渡島", lat: 38.00, lon: 138.40 },
+        { name: "上越市", lat: 37.14, lon: 138.24 },
+        { name: "越後湯沢", lat: 36.93, lon: 138.80 },
+        { name: "長野市", lat: 36.65, lon: 138.18 },
+        { name: "松本市", lat: 36.23, lon: 137.97 },
+        { name: "軽井沢町", lat: 36.34, lon: 138.63 },
+        { name: "草津町", lat: 36.62, lon: 138.60 },
+        { name: "甲府市", lat: 35.66, lon: 138.57 }
+    ],
+    "東海": [
+        { name: "富士市", lat: 35.16, lon: 138.67 },
+        { name: "静岡市", lat: 34.98, lon: 138.38 },
+        { name: "浜松市", lat: 34.71, lon: 137.72 },
+        { name: "下田市", lat: 34.67, lon: 138.94 },
+        { name: "岐阜市", lat: 35.42, lon: 136.76 },
+        { name: "大垣市", lat: 35.36, lon: 136.61 },
+        { name: "名古屋市", lat: 35.18, lon: 136.91 },
+        { name: "津市", lat: 34.72, lon: 136.51 },
+        { name: "鳥羽市", lat: 34.48, lon: 136.84 },
+        { name: "長島", lat: 35.05, lon: 136.70 }
+    ],
+"北陸": [
+        { name: "富山市", lat: 36.70, lon: 137.21 },
+        { name: "高岡市", lat: 36.75, lon: 137.01 },
+        { name: "金沢市", lat: 36.56, lon: 136.65 },
+        { name: "輪島市", lat: 37.39, lon: 136.90 },
+        { name: "白山市", lat: 36.51, lon: 136.56 }, // 山間部・霊峰白山
+        { name: "柏崎市", lat: 37.36, lon: 138.55 },
+        { name: "福井市", lat: 36.06, lon: 136.22 },
+        { name: "敦賀市", lat: 35.65, lon: 136.06 }, // 交通の要衝
+        { name: "小浜市", lat: 35.49, lon: 135.74 },
+        { name: "大野市", lat: 35.98, lon: 136.48 }  // 奥越の山間部
+    ],
+    "近畿": [
+        { name: "京都市", lat: 35.01, lon: 135.76 },
+        { name: "舞鶴市", lat: 35.47, lon: 135.33 }, // 日本海側
+        { name: "福知山市", lat: 35.30, lon: 135.13 }, // 内陸盆地
+        { name: "大津市", lat: 35.01, lon: 135.86 },
+        { name: "彦根市", lat: 35.27, lon: 136.25 }, // 琵琶湖東岸
+        { name: "大阪市", lat: 34.69, lon: 135.50 },
+        { name: "堺市", lat: 34.57, lon: 135.48 },
+        { name: "豊中市", lat: 34.78, lon: 135.46 }, // 北摂
+        { name: "神戸市", lat: 34.69, lon: 135.19 },
+        { name: "姫路市", lat: 34.81, lon: 134.69 },
+        { name: "奈良市", lat: 34.68, lon: 135.83 },
+        { name: "十津川村", lat: 34.02, lon: 135.84 }, // 日本最大の村・山間部
+        { name: "和歌山市", lat: 34.23, lon: 135.17 },
+        { name: "田辺市", lat: 33.93, lon: 135.48 }, // 紀伊半島南西
+        { name: "串本町", lat: 33.47, lon: 135.78 }, // 本州最南端
+        { name: "淡路島", lat: 34.34, lon: 134.89 }
+    ],
+    "中国": [
+        { name: "鳥取市", lat: 35.50, lon: 134.24 },
+        { name: "米子市", lat: 35.43, lon: 133.33 },
+        { name: "松江市", lat: 35.47, lon: 133.05 },
+        { name: "出雲市", lat: 35.36, lon: 132.75 },
+        { name: "隠岐(海士町)", lat: 36.10, lon: 133.10 },
+        { name: "津山市", lat: 35.06, lon: 134.00 }, // 中国山地の盆地
+        { name: "岡山市", lat: 34.66, lon: 133.92 },
+        { name: "倉敷市", lat: 34.58, lon: 133.77 },
+        { name: "広島市", lat: 34.39, lon: 132.46 },
+        { name: "福山市", lat: 34.48, lon: 133.36 },
+        { name: "三次市", lat: 34.80, lon: 132.85 }, // 山間部・霧の町
+        { name: "呉市", lat: 34.25, lon: 132.57 },
+        { name: "山口市", lat: 34.18, lon: 131.47 },
+        { name: "下関市", lat: 33.95, lon: 130.93 }, // 関門海峡
+        { name: "岩国市", lat: 34.17, lon: 132.22 }
+    ],
+    "四国": [
+        { name: "松山市", lat: 33.84, lon: 132.77 },
+        { name: "今治市", lat: 34.07, lon: 133.00 },
+        { name: "新居浜市", lat: 33.96, lon: 133.28 },
+        { name: "宇和島市", lat: 33.22, lon: 132.56 }, // 南予
+        { name: "高松市", lat: 34.34, lon: 134.04 },
+        { name: "丸亀市", lat: 34.29, lon: 133.79 },
+        { name: "観音寺市", lat: 34.12, lon: 133.65 },
+        { name: "徳島市", lat: 34.07, lon: 134.55 },
+        { name: "阿南市", lat: 33.92, lon: 134.65 },
+        { name: "三好市(池田)", lat: 34.02, lon: 133.80 }, // 四国山地・秘境
+        { name: "高知市", lat: 33.56, lon: 133.53 },
+        { name: "四万十市", lat: 32.99, lon: 132.93 }, // 国内最高温を記録する地
+        { name: "室戸市", lat: 33.28, lon: 134.15 }  // 台風の通り道
+    ],
+    "九州": [
+        { name: "福岡市", lat: 33.59, lon: 130.40 },
+        { name: "北九州市", lat: 33.88, lon: 130.88 },
+        { name: "佐賀市", lat: 33.26, lon: 130.30 },
+        { name: "佐世保市", lat: 33.18, lon: 129.72 },
+        { name: "長崎市", lat: 32.75, lon: 129.88 },
+        { name: "対馬市", lat: 34.20, lon: 129.29 },
+        { name: "熊本市", lat: 32.79, lon: 130.71 },
+        { name: "阿蘇市", lat: 32.94, lon: 131.12 },
+        { name: "大分市", lat: 33.24, lon: 131.61 },
+        { name: "宮崎市", lat: 31.91, lon: 131.42 },
+        { name: "鹿児島市", lat: 31.56, lon: 130.56 },
+        { name: "出水市", lat: 32.08, lon: 130.35 },
+        { name: "屋久島", lat: 30.34, lon: 130.51 }
+    ],
+    "沖縄": [
+        { name: "那覇市", lat: 26.21, lon: 127.68 },
+        { name: "与那国島", lat: 24.47, lon: 123.01 },
+        { name: "石垣市", lat: 24.34, lon: 124.16 },
+        { name: "奄美市", lat: 28.37, lon: 129.48 },
+        { name: "南鳥島", lat: 24.28, lon: 153.98 },
+        { name: "小笠原諸島", lat: 27.09, lon: 142.19 }
+    ],
+    "南極": [
+        { name: "昭和基地", lat: -69.00, lon: 39.58 }
+    ],
+    "世界の極地・極点": [
+        { name: "オイミャコン(ロシア)", lat: 63.46, lon: 142.78 }, // 世界一寒い定住地
+        { name: "ベルホヤンスク(ロシア)", lat: 67.55, lon: 133.38 }, // 寒暖差の激しい「寒の極」
+        { name: "デスバレー(アメリカ)", lat: 36.46, lon: -116.87 }, // 世界最高気温記録
+        { name: "クウェートシティ(クウェート)", lat: 29.37, lon: 47.97 }, // 世界一暑い都市の一つ
+        { name: "アリカ(チリ)", lat: -18.47, lon: -70.30 }, // 世界一雨が降らない場所
+        { name: "チェラプンジ(インド)", lat: 25.27, lon: 91.73 }, // 世界一降水量が多い場所
+        { name: "ラ・リンコナーダ(ペルー)", lat: -14.63, lon: -69.44 }, // 世界一標高が高い定住地(5100m)
+        { name: "ロングイェールビーン(ノルウェー)", lat: 78.22, lon: 15.63 }, // 世界最北の街
+        { name: "ウシュアイア(アルゼンチン)", lat: -54.80, lon: -68.30 }, // 世界最南端の街
+        { name: "アムンゼン・スコット基地(南極点)", lat: -90.0, lon: 0.0 } // 地球の底
+    ]
+};
+    // 1. 全地点をフラットな配列に展開
+    const allPoints = [];
+    for (const region in locations) {
+        locations[region].forEach(loc => {
+            allPoints.push({ ...loc, region });
+        });
+    }
+
+    // 2. 緯度・経度を連結して一括リクエスト
+    const lats = allPoints.map(p => p.lat).join(',');
+    const lons = allPoints.map(p => p.lon).join(',');
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&daily=weathercode,temperature_2m_max,precipitation_probability_max&timezone=Asia%2FTokyo`;
+
+    let report = mode === 'morning' ? "☀️ 本日の天気予報をお知らせします\n\n" : "🌙 明日の天気予報をお知らせします\n\n";
+    const dayOffset = mode === 'morning' ? 0 : 1;
 
     try {
+        console.log(`🌐 ${allPoints.length}地点のデータを一括取得中...`);
         const res = await fetch(url);
-        const data = await res.json(); // data自体が路線の配列になっている
+        const data = await res.json();
 
-        // --- 1. 遅延情報がない場合（空配列 [] のとき） ---
-        if (!Array.isArray(data) || data.length === 0) {
-            return {
-                text: "【鉄道運行状況】全線、遅延なく運行中です。ですが、念のためテレビなどで一度調べることをお勧めします",
-                cw: null
-            };
-        }
+        // APIはリクエストした順番に配列でデータを返してくる（単一地点の場合はオブジェクト、複数なら配列）
+        const results = Array.isArray(data) ? data : [data];
 
-        // --- 2. 遅延がある場合 ---
-        const regions = {};
-        const affectedLines = [];
-
-        data.forEach(info => {
-            // 会社名（company）がない場合は「その他」に分類
-            const region = info.company || "その他";
-            if (!regions[region]) regions[region] = [];
+        // 3. 地方ごとに整理してレポート作成
+        let currentIndex = 0;
+        for (const region in locations) {
+            report += `【${region}】\n`;
             
-            // 路線名と状況を結合
-            regions[region].push(`${info.name}: ${info.lastText || "情報あり"}`);
-            affectedLines.push(info.name);
-        });
+            for (const loc of locations[region]) {
+                const targetData = results[currentIndex].daily;
+                const weatherCode = targetData.weathercode[dayOffset];
+                const maxTemp = Math.round(targetData.temperature_2m_max[dayOffset]);
+                const prob = targetData.precipitation_probability_max[dayOffset];
 
-        // CWの作成
-        const cw = `⚠️ 【運行情報】${affectedLines.slice(0, 5).join('、')}${affectedLines.length > 5 ? '...ほか' : ''}`;
+// 天気コード変換（WMO準拠）
+                let emoji = "☁️"; // デフォルトは曇り
 
-        let text = "🚃 運行情報をお知らせします\n\n";
-        for (const reg in regions) {
-            text += `【${reg}】\n`;
-            text += regions[reg].join('\n') + "\n\n";
+                if (weatherCode <= 1) {
+                    emoji = "☀️"; // 快晴・晴れ
+                } else if (weatherCode <= 3) {
+                    emoji = "⛅"; // 晴れ時々曇り
+                } else if (weatherCode === 45 || weatherCode === 48) {
+                    emoji = "🌫️"; // 霧
+                } else if (weatherCode >= 51 && weatherCode <= 55) {
+                    emoji = "☔"; // 小雨・霧雨
+                } else if (weatherCode === 56 || weatherCode === 57 || weatherCode === 66 || weatherCode === 67) {
+                    emoji = "🧊☔"; // 着氷性の雨（フリージングレイン）
+                } else if (weatherCode >= 61 && weatherCode <= 65) {
+                    // 雨の強さ判定
+                    if (weatherCode === 61) emoji = "☔"; // 普通の雨
+                    if (weatherCode === 63) emoji = "🟨☔"; // 強い雨
+                    if (weatherCode === 65) emoji = "🟥☔"; // 激しい雨
+                } else if (weatherCode >= 71 && weatherCode <= 75) {
+                    emoji = "❄️"; // 雪
+                } else if (weatherCode === 77) {
+                    emoji = "🧊"; // 霧雪・あられ
+                } else if (weatherCode >= 80 && weatherCode <= 82) {
+                    // にわか雨（大雨系）
+                    if (weatherCode === 80) emoji = "☔";
+                    if (weatherCode === 81) emoji = "🟥☔"; // 激しいにわか雨
+                    if (weatherCode === 82) emoji = "⬛☔"; // 猛烈な雨
+                } else if (weatherCode >= 85 && weatherCode <= 86) {
+                    emoji = "⛄"; // 大雪（雪のシャワー）
+                } else if (weatherCode >= 95 && weatherCode <= 99) {
+                    // 雷・雷雨
+                    if (weatherCode === 95) emoji = "⚡"; // 雷
+                    else emoji = "⛈️"; // 強い雷雨
+                }
+
+                report += `${loc.name}: ${emoji} ${maxTemp}℃ ${prob}%\n`;
+                currentIndex++;
+            }
+            report += "\n";
         }
-        text += "※情報は自動取得のため、最新の状況と異なる場合があります。";
-
-        return { text, cw };
 
     } catch (e) {
-        console.error("🚨 鉄道情報取得エラー:", e);
-        return {
-            text: "⚠️ 鉄道運行情報の取得に失敗しました。最新の状況は公式情報をご確認ください。",
-            cw: null
-        };
+        console.error("🚨 天気一括取得エラー:", e);
+        return "⚠️ 天気データの取得に失敗しました。";
     }
+
+    return report;
 }
 // ================================
 // 🧠 マルコフ生成（進化版）
@@ -1039,43 +1250,39 @@ async function main() {
 
         // 5. 💬 メンション（返信）処理
         await handleMentions(me);
-            // --- main関数内 ---
-const now = new Date(new Date().toLocaleString("ja-JP", {timeZone: "Asia/Tokyo"}));
-const hour = now.getHours();
-const min = now.getMinutes();
+        // 1. 🕒 時間判定（日本時間）
+        const now = new Date(new Date().toLocaleString("ja-JP", {timeZone: "Asia/Tokyo"}));
+        const hour = now.getHours();
+        const min = now.getMinutes();
 
-let shouldCheckRailway = false;
+        // 判定フラグ（実行ウィンドウを15分に少し広げると、Actionsの遅延に強くなります）
+        const isMorning = (hour === 12 && min <= 30);
+        const isEvening = (hour === 19 && min <= 15);
+        const isMidnight = (hour === 0 && min <= 15);
 
-// 1. 朝のラッシュ（7時, 8時は「10分」と「40分」の2回）
-if ((hour === 7 || hour === 8) && (min === 10 || min === 40)) {
-    shouldCheckRailway = true;
-} 
-// 2. 夜の帰宅帯（18時, 19時, 20時は「10分」と「40分」の2回）
-else if ((hour >= 18 && hour <= 20) && (min === 10 || min === 40)) {
-    shouldCheckRailway = true;
-}
-// 3. それ以外の時間帯は「毎時10分」のみ（生存確認）
-// 深夜（1時〜5時）は完全に停止させるなら (hour >= 6 || hour === 0) を追加
-else if (min === 10) {
-    shouldCheckRailway = true;
-}
+        // 2. ☀️ 天気予報モードの実行
+        if (isMorning || isEvening || isMidnight) {
+            console.log("🌡 天気予報投稿モード始動...");
 
-// 2. 実行
-if (shouldCheckRailway) {
-    console.log("🚃 運行情報チェック開始...");
-    const railData = await generateRailwayReport();
+            // 朝(7時)なら「今日」、それ以外(19時/0時)なら「明日」のデータを取得
+            const mode = isMorning ? 'morning' : 'evening';
+            const weatherContent = await generateWeatherReport(mode);
 
-    if (railData) {
-        await requestToMk('notes/create', {
-            text: railData.text,
-            cw: railData.cw,
-            visibility: "public"
-        });
-        console.log(`✅ 運行情報を投稿しました。（CW: ${railData.cw ? 'あり' : 'なし'}）`);
-        
-        await new Promise(resolve => setTimeout(resolve, 4000));
-    }
-}
+            // 注釈（CW）の文字を決定
+            const cwText = isMorning ? "☀️ 本日の天気予報" : "🌙 明日の天気予報";
+
+            await requestToMk('notes/create', {
+                text: weatherContent,
+                cw: cwText,
+                visibility: "public"
+            });
+            
+            console.log(`✅ 天気予報(${mode})をパブリックで投稿しました。`);
+
+            // 4秒待機
+            console.log("⏳ 4秒待機してマルコフ連鎖を開始します...");
+            await new Promise(resolve => setTimeout(resolve, 4000));
+        }
         // 6. 📝 定期投稿の準備
         console.log("定期投稿の準備を開始します...");
         await sleep(2000);
