@@ -1256,7 +1256,7 @@ async function main() {
         const min = now.getMinutes();
 
         // 判定フラグ（実行ウィンドウを15分に少し広げると、Actionsの遅延に強くなります）
-        const isMorning = (hour === 12 && min <= 30);
+        const isMorning = (hour === 7 && min <= 15);
         const isEvening = (hour === 19 && min <= 15);
         const isMidnight = (hour === 0 && min <= 15);
 
