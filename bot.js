@@ -1035,40 +1035,7 @@ async function main() {
         await handleFollowControl(my_id);
 
         // 5. 💬 メンション（返信）処理
-        await handleMentions(me);// --- main関数内 ---
-const now = new Date(new Date().toLocaleString("ja-JP", {timeZone: "Asia/Tokyo"}));
-const hour = now.getHours();
-const min = now.getMinutes();
-
-// 1. 運行情報を投稿すべき時間か判定
-let shouldCheckRailway = false;
-
-// ラッシュ時間帯（6時, 7時, 8時 / 17時, 18時, 19時）は全スロット（10, 30, 50分）実行
-if ((hour >= 6 && hour <= 8) || (hour >= 17 && hour <= 19)) {
-    shouldCheckRailway = true;
-} 
-// それ以外の時間帯は「毎時10分」のみ生存確認を兼ねて実行
-else if (min === 10) {
-    shouldCheckRailway = true;
-}
-
-// 2. 実行
-if (shouldCheckRailway) {
-    console.log("🚃 運行情報チェック開始...");
-    const railData = await generateRailwayReport();
-
-    if (railData) {
-        await requestToMk('notes/create', {
-            text: railData.text,
-            cw: railData.cw, // cwがnullならMisskey側で自動的にCWなし投稿になります
-            visibility: "public"
-        });
-        console.log(`✅ 運行情報を投稿しました。（CW: ${railData.cw ? 'あり' : 'なし'}）`);
-        
-        // 4秒待機してマルコフ連鎖へ
-        await new Promise(resolve => setTimeout(resolve, 4000));
-    }
-}
+        await handleMentions(me);
         // 6. 📝 定期投稿の準備
         console.log("定期投稿の準備を開始します...");
         await sleep(2000);
