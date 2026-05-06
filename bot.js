@@ -788,18 +788,19 @@ async function saveBrainToDrive(drive, brain) {
         console.error("❌ 例外発生:", e.message);
         return false;
     }
-}async function generateRailwayReport() {
+}
+async function generateRailwayReport() {
     const url = "https://tetsudo.rti-giken.jp/free/tetsudo.json"; 
 
     try {
         const res = await fetch(url);
-        const data = await res.json();
+        const data = await res.json(); // data自体が路線の配列になっている
 
-        // --- 1. 遅延情報が空、またはデータがない場合 ---
-        if (!data || !data.tetsudo || data.tetsudo.length === 0) {
+        // --- 1. 遅延情報がない場合（空配列 [] のとき） ---
+        if (!Array.isArray(data) || data.length === 0) {
             return {
                 text: "【鉄道運行状況】全線、遅延なく運行中です。ですが、念のためテレビなどで一度調べることをお勧めします",
-                cw: null // CWなし
+                cw: null
             };
         }
 
@@ -807,14 +808,17 @@ async function saveBrainToDrive(drive, brain) {
         const regions = {};
         const affectedLines = [];
 
-        data.tetsudo.forEach(info => {
+        data.forEach(info => {
+            // 会社名（company）がない場合は「その他」に分類
             const region = info.company || "その他";
             if (!regions[region]) regions[region] = [];
             
+            // 路線名と状況を結合
             regions[region].push(`${info.name}: ${info.lastText || "情報あり"}`);
             affectedLines.push(info.name);
         });
 
+        // CWの作成
         const cw = `⚠️ 【運行情報】${affectedLines.slice(0, 5).join('、')}${affectedLines.length > 5 ? '...ほか' : ''}`;
 
         let text = "🚃 運行情報をお知らせします\n\n";
@@ -828,7 +832,6 @@ async function saveBrainToDrive(drive, brain) {
 
     } catch (e) {
         console.error("🚨 鉄道情報取得エラー:", e);
-        // エラー時も「不明」とするよりは、静かにしておくか「確認不可」と出す
         return {
             text: "⚠️ 鉄道運行情報の取得に失敗しました。最新の状況は公式情報をご確認ください。",
             cw: null
@@ -1036,6 +1039,43 @@ async function main() {
 
         // 5. 💬 メンション（返信）処理
         await handleMentions(me);
+            // --- main関数内 ---
+const now = new Date(new Date().toLocaleString("ja-JP", {timeZone: "Asia/Tokyo"}));
+const hour = now.getHours();
+const min = now.getMinutes();
+
+let shouldCheckRailway = false;
+
+// 1. 朝のラッシュ（7時, 8時は「10分」と「40分」の2回）
+if ((hour === 7 || hour === 8) && (min === 10 || min === 40)) {
+    shouldCheckRailway = true;
+} 
+// 2. 夜の帰宅帯（18時, 19時, 20時は「10分」と「40分」の2回）
+else if ((hour >= 18 && hour <= 20) && (min === 10 || min === 40)) {
+    shouldCheckRailway = true;
+}
+// 3. それ以外の時間帯は「毎時10分」のみ（生存確認）
+// 深夜（1時〜5時）は完全に停止させるなら (hour >= 6 || hour === 0) を追加
+else if (min === 10) {
+    shouldCheckRailway = true;
+}
+
+// 2. 実行
+if (shouldCheckRailway) {
+    console.log("🚃 運行情報チェック開始...");
+    const railData = await generateRailwayReport();
+
+    if (railData) {
+        await requestToMk('notes/create', {
+            text: railData.text,
+            cw: railData.cw,
+            visibility: "public"
+        });
+        console.log(`✅ 運行情報を投稿しました。（CW: ${railData.cw ? 'あり' : 'なし'}）`);
+        
+        await new Promise(resolve => setTimeout(resolve, 4000));
+    }
+}
         // 6. 📝 定期投稿の準備
         console.log("定期投稿の準備を開始します...");
         await sleep(2000);
