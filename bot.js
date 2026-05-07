@@ -789,10 +789,6 @@ async function saveBrainToDrive(drive, brain) {
         return false;
     }
 }
-async function generateWeatherReport(mode, locations) {
-    // 1. 指定されたlocationsをフラットな配列に展開
-    // 地点データ定義（地方ごとに配列を作成）
-// --- グループ1: 東日本・北日本・樺太・千島列島 ---
 const locationsGroupA = {
     "北海道": [
         { name: "稚内市", lat: 45.41, lon: 141.67 },
@@ -973,6 +969,11 @@ const locationsGroupB = {
         { name: "アムンゼン・スコット基地(南極点)", lat: -90.0, lon: 0.0 } // 地球の底
     ]
 };
+async function generateWeatherReport(mode, locations) {
+    // 1. 指定されたlocationsをフラットな配列に展開
+    // 地点データ定義（地方ごとに配列を作成）
+// --- グループ1: 東日本・北日本・樺太・千島列島 ---
+   
     const allPoints = [];
     for (const region in locations) {
         locations[region].forEach(loc => {
