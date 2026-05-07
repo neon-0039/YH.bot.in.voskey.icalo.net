@@ -1239,39 +1239,62 @@ async function main() {
 
         // 5. 💬 メンション（返信）処理
         await handleMentions(me);
-        // 1. 🕒 時間判定（日本時間）
-        const now = new Date(new Date().toLocaleString("ja-JP", {timeZone: "Asia/Tokyo"}));
-        const hour = now.getHours();
-        const min = now.getMinutes();
+// 1. 🕒 時間判定（日本時間）
+const now = new Date(new Date().toLocaleString("ja-JP", {timeZone: "Asia/Tokyo"}));
+const hour = now.getHours();
+const min = now.getMinutes();
 
-        // 判定フラグ（実行ウィンドウを15分に少し広げると、Actionsの遅延に強くなります）
-        const isMorning = (hour === 7 && min <= 15);
-        const isEvening = (hour === 19 && min <= 15);
-        const isMidnight = (hour === 0 && min <= 15);
+// 判定フラグ（GitHub Actionsの実行遅延を考慮し、15分幅を持たせています）
+const isMorning = (hour === 7 && min <= 15);
+const isEvening = (hour === 19 && min <= 15);
+const isMidnight = (hour === 0 && min <= 15);
 
-        // 2. ☀️ 天気予報モードの実行
-        if (isMorning || isEvening || isMidnight) {
-            console.log("🌡 天気予報投稿モード始動...");
+// 2. ☀️ 天気予報モードの実行
+if (isMorning || isEvening || isMidnight) {
+    console.log("🌡 天気予報投稿モード始動（2段階投稿）...");
 
-            // 朝(7時)なら「今日」、それ以外(19時/0時)なら「明日」のデータを取得
-            const mode = isMorning ? 'morning' : 'evening';
-            const weatherContent = await generateWeatherReport(mode);
+    // 朝(7時)なら「今日」、それ以外(19時/0時)なら「明日」のデータを取得
+    const mode = isMorning ? 'morning' : 'evening';
+    const dayLabel = isMorning ? "本日" : "明日";
 
-            // 注釈（CW）の文字を決定
-            const cwText = isMorning ? "☀️ 本日の天気予報" : "🌙 明日の天気予報";
+    // 凡例の作成
+    const legend = 
+        "\n【凡例】\n" +
+        "表示: [午前9時] → [午後15時] (1日の最大降水確率%)\n" +
+        "🟨☔=強い雨 / 🟥☔=激しい雨 / ⬛☔=猛烈な雨 / ⛈️=雷雨 / 🧊=氷・あられ";
 
-            await requestToMk('notes/create', {
-                text: weatherContent,
-                cw: cwText,
-                visibility: "public"
-            });
-            
-            console.log(`✅ 天気予報(${mode})をパブリックで投稿しました。`);
+    // --- 第1弾：東日本・北日本・北方領土・樺太 ---
+    console.log("📡 グループA（東日本・北日本）取得中...");
+    const reportA = await generateWeatherReport(mode, locationsGroupA);
+    const cwA = `${isMorning ? '☀️' : '🌙'} ${dayLabel}の天気予報【東日本・北日本・樺太】`;
 
-            // 4秒待機
-            console.log("⏳ 4秒待機してマルコフ連鎖を開始します...");
-            await new Promise(resolve => setTimeout(resolve, 4000));
-        }
+    await requestToMk('notes/create', {
+        text: reportA + legend,
+        cw: cwA,
+        visibility: "public"
+    });
+
+    // 連続投稿制限回避のための待機
+    console.log("⏳ 5秒待機して第2弾を投稿します...");
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // --- 第2弾：西日本・沖縄・海外・極地 ---
+    console.log("📡 グループB（西日本・海外・極地）取得中...");
+    const reportB = await generateWeatherReport(mode, locationsGroupB);
+    const cwB = `${isMorning ? '☀️' : '🌙'} ${dayLabel}の天気予報【西日本・南方・海外極地】`;
+
+    await requestToMk('notes/create', {
+        text: reportB + legend,
+        cw: cwB,
+        visibility: "public"
+    });
+
+    console.log(`✅ 天気予報(${mode})を2つのノートに分けて投稿しました。`);
+
+    // マルコフ連鎖への移行待機
+    console.log("⏳ 4秒待機してマルコフ連鎖を開始します...");
+    await new Promise(resolve => setTimeout(resolve, 4000));
+}
         // 6. 📝 定期投稿の準備
         console.log("定期投稿の準備を開始します...");
         await sleep(2000);
