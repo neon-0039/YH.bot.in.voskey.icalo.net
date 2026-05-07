@@ -788,7 +788,8 @@ async function saveBrainToDrive(drive, brain) {
         console.error("❌ 例外発生:", e.message);
         return false;
     }
-}async function generateWeatherReport(mode) {
+}
+async function generateWeatherReport(mode) {
     // 地点データ定義（地方ごとに配列を作成）
 const locations = {
     "北海道": [
@@ -975,68 +976,67 @@ const locations = {
     }
 
     // 2. 緯度・経度を連結して一括リクエスト
+    // hourly（時間別）で天気コード、気温、降水確率を取得
     const lats = allPoints.map(p => p.lat).join(',');
     const lons = allPoints.map(p => p.lon).join(',');
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&daily=weathercode,temperature_2m_max,precipitation_probability_max&timezone=Asia%2FTokyo`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&hourly=weathercode,temperature_2m,precipitation_probability&timezone=Asia%2FTokyo`;
 
     let report = mode === 'morning' ? "☀️ 本日の天気予報をお知らせします\n\n" : "🌙 明日の天気予報をお知らせします\n\n";
-    const dayOffset = mode === 'morning' ? 0 : 1;
+    
+    // 表示する時間帯のインデックス（0時を起点とした経過時間）を計算
+    // modeがmorningなら当日(0h〜)、tomorrowなら翌日(24h〜)
+    const baseHour = mode === 'morning' ? 0 : 24;
+    const amIdx = baseHour + 9;  // 午前9時
+    const pmIdx = baseHour + 15; // 午後15時
 
     try {
-        console.log(`🌐 ${allPoints.length}地点のデータを一括取得中...`);
+        console.log(`🌐 ${allPoints.length}地点の時系列データを一括取得中...`);
         const res = await fetch(url);
         const data = await res.json();
-
-        // APIはリクエストした順番に配列でデータを返してくる（単一地点の場合はオブジェクト、複数なら配列）
         const results = Array.isArray(data) ? data : [data];
 
-        // 3. 地方ごとに整理してレポート作成
+        // 天気コードを絵文字に変換するサブ関数
+        const getEmoji = (code) => {
+            if (code <= 1) return "☀️";
+            if (code <= 3) return "⛅";
+            if (code === 45 || code === 48) return "🌫️";
+            if (code >= 51 && code <= 55) return "☔";
+            if (code === 56 || code === 57 || code === 66 || code === 67) return "🧊☔";
+            if (code === 61) return "☔";
+            if (code === 63) return "🟨☔";
+            if (code === 65) return "🟥☔";
+            if (code >= 71 && code <= 75) return "❄️";
+            if (code === 77) return "🧊";
+            if (code === 80) return "☔";
+            if (code === 81) return "🟥☔";
+            if (code === 82) return "⬛☔";
+            if (code >= 85 && code <= 86) return "⛄";
+            if (code >= 95) return "⛈️";
+            return "☁️";
+        };
+
+        // 3. レポート作成
         let currentIndex = 0;
         for (const region in locations) {
             report += `【${region}】\n`;
             
             for (const loc of locations[region]) {
-                const targetData = results[currentIndex].daily;
-                const weatherCode = targetData.weathercode[dayOffset];
-                const maxTemp = Math.round(targetData.temperature_2m_max[dayOffset]);
-                const prob = targetData.precipitation_probability_max[dayOffset];
+                const h = results[currentIndex].hourly;
+                
+                // 午前(9時)のデータ
+                const amEmoji = getEmoji(h.weathercode[amIdx]);
+                const amTemp = Math.round(h.temperature_2m[amIdx]);
+                
+                // 午後(15時)のデータ
+                const pmEmoji = getEmoji(h.weathercode[pmIdx]);
+                const pmTemp = Math.round(h.temperature_2m[pmIdx]);
+                
+                // 降水確率はその日の最大値を代表として表示（利便性のため）
+                const dayProb = Math.max(...h.precipitation_probability.slice(baseHour, baseHour + 24));
 
-// 天気コード変換（WMO準拠）
-                let emoji = "☁️"; // デフォルトは曇り
-
-                if (weatherCode <= 1) {
-                    emoji = "☀️"; // 快晴・晴れ
-                } else if (weatherCode <= 3) {
-                    emoji = "⛅"; // 晴れ時々曇り
-                } else if (weatherCode === 45 || weatherCode === 48) {
-                    emoji = "🌫️"; // 霧
-                } else if (weatherCode >= 51 && weatherCode <= 55) {
-                    emoji = "☔"; // 小雨・霧雨
-                } else if (weatherCode === 56 || weatherCode === 57 || weatherCode === 66 || weatherCode === 67) {
-                    emoji = "🧊☔"; // 着氷性の雨（フリージングレイン）
-                } else if (weatherCode >= 61 && weatherCode <= 65) {
-                    // 雨の強さ判定
-                    if (weatherCode === 61) emoji = "☔"; // 普通の雨
-                    if (weatherCode === 63) emoji = "🟨☔"; // 強い雨
-                    if (weatherCode === 65) emoji = "🟥☔"; // 激しい雨
-                } else if (weatherCode >= 71 && weatherCode <= 75) {
-                    emoji = "❄️"; // 雪
-                } else if (weatherCode === 77) {
-                    emoji = "🧊"; // 霧雪・あられ
-                } else if (weatherCode >= 80 && weatherCode <= 82) {
-                    // にわか雨（大雨系）
-                    if (weatherCode === 80) emoji = "☔";
-                    if (weatherCode === 81) emoji = "🟥☔"; // 激しいにわか雨
-                    if (weatherCode === 82) emoji = "⬛☔"; // 猛烈な雨
-                } else if (weatherCode >= 85 && weatherCode <= 86) {
-                    emoji = "⛄"; // 大雪（雪のシャワー）
-                } else if (weatherCode >= 95 && weatherCode <= 99) {
-                    // 雷・雷雨
-                    if (weatherCode === 95) emoji = "⚡"; // 雷
-                    else emoji = "⛈️"; // 強い雷雨
-                }
-
-                report += `${loc.name}: ${emoji} ${maxTemp}℃ ${prob}%\n`;
+                // 表示形式: 地点名: [午前] ☀️ 20℃ | [午後] ⛅ 24℃ (降水 10%)
+                report += `${loc.name}: ${amEmoji}${amTemp}℃→${pmEmoji}${pmTemp}℃ (${dayProb}%)\n`;
+                
                 currentIndex++;
             }
             report += "\n";
