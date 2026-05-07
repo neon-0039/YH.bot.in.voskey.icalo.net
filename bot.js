@@ -789,9 +789,11 @@ async function saveBrainToDrive(drive, brain) {
         return false;
     }
 }
-async function generateWeatherReport(mode) {
+async function generateWeatherReport(mode, locations) {
+    // 1. 指定されたlocationsをフラットな配列に展開
     // 地点データ定義（地方ごとに配列を作成）
-const locations = {
+// --- グループ1: 東日本・北日本・樺太・千島列島 ---
+const locationsGroupA = {
     "北海道": [
         { name: "稚内市", lat: 45.41, lon: 141.67 },
         { name: "知床(斜里町)", lat: 44.02, lon: 144.98 },
@@ -806,14 +808,14 @@ const locations = {
         { name: "択捉島", lat: 45.0, lon: 147.5 },
         { name: "国後島", lat: 44.0, lon: 145.8 }
     ],
-"樺太・千島列島": [
-        { name: "占守島", lat: 50.7, lon: 156.2 }, // 最北端
-        { name: "幌筵島(パラムシル)", lat: 50.1, lon: 155.3 }, // 北千島の中心
-        { name: "得撫島(ウルップ)", lat: 45.8, lon: 149.9 }, // 中千島
-        { name: "ユジノサハリンスク（旧:豊原）", lat: 46.95, lon: 142.73 }, // 樺太南部（旧豊原）
-        { name: "ホルムスク（旧:真岡）", lat: 47.05, lon: 142.04 }, // 樺太西岸（旧真岡）
-        { name: "ポロナイスク（旧:敷香）", lat: 49.22, lon: 143.11 }, // 樺太東岸（旧敷香）
-        { name: "アレクサンドロフスク", lat: 50.9, lon: 142.15 } // 樺太北部
+    "樺太・千島列島": [
+        { name: "占守島", lat: 50.7, lon: 156.2 },
+        { name: "幌筵島(パラムシル)", lat: 50.1, lon: 155.3 },
+        { name: "得撫島(ウルップ)", lat: 45.8, lon: 149.9 },
+        { name: "ユジノサハリンスク（旧:豊原）", lat: 46.95, lon: 142.73 },
+        { name: "ホルムスク（旧:真岡）", lat: 47.05, lon: 142.04 },
+        { name: "ポロナイスク（旧:敷香）", lat: 49.22, lon: 143.11 },
+        { name: "アレクサンドロフスク", lat: 50.9, lon: 142.15 }
     ],
     "東北": [
         { name: "大間町", lat: 41.53, lon: 140.91 },
@@ -865,35 +867,39 @@ const locations = {
         { name: "津市", lat: 34.72, lon: 136.51 },
         { name: "鳥羽市", lat: 34.48, lon: 136.84 },
         { name: "長島", lat: 35.05, lon: 136.70 }
-    ],
-"北陸": [
+    ]
+};
+
+// --- グループ2: 北陸・西日本・沖縄・海外・極地 ---
+const locationsGroupB = {
+    "北陸": [
         { name: "富山市", lat: 36.70, lon: 137.21 },
         { name: "高岡市", lat: 36.75, lon: 137.01 },
         { name: "金沢市", lat: 36.56, lon: 136.65 },
         { name: "輪島市", lat: 37.39, lon: 136.90 },
-        { name: "白山市", lat: 36.51, lon: 136.56 }, // 山間部・霊峰白山
+        { name: "白山市", lat: 36.51, lon: 136.56 },
         { name: "柏崎市", lat: 37.36, lon: 138.55 },
         { name: "福井市", lat: 36.06, lon: 136.22 },
-        { name: "敦賀市", lat: 35.65, lon: 136.06 }, // 交通の要衝
+        { name: "敦賀市", lat: 35.65, lon: 136.06 },
         { name: "小浜市", lat: 35.49, lon: 135.74 },
-        { name: "大野市", lat: 35.98, lon: 136.48 }  // 奥越の山間部
+        { name: "大野市", lat: 35.98, lon: 136.48 }
     ],
     "近畿": [
         { name: "京都市", lat: 35.01, lon: 135.76 },
-        { name: "舞鶴市", lat: 35.47, lon: 135.33 }, // 日本海側
-        { name: "福知山市", lat: 35.30, lon: 135.13 }, // 内陸盆地
+        { name: "舞鶴市", lat: 35.47, lon: 135.33 },
+        { name: "福知山市", lat: 35.30, lon: 135.13 },
         { name: "大津市", lat: 35.01, lon: 135.86 },
-        { name: "彦根市", lat: 35.27, lon: 136.25 }, // 琵琶湖東岸
+        { name: "彦根市", lat: 35.27, lon: 136.25 },
         { name: "大阪市", lat: 34.69, lon: 135.50 },
         { name: "堺市", lat: 34.57, lon: 135.48 },
-        { name: "豊中市", lat: 34.78, lon: 135.46 }, // 北摂
+        { name: "豊中市", lat: 34.78, lon: 135.46 },
         { name: "神戸市", lat: 34.69, lon: 135.19 },
         { name: "姫路市", lat: 34.81, lon: 134.69 },
         { name: "奈良市", lat: 34.68, lon: 135.83 },
-        { name: "十津川村", lat: 34.02, lon: 135.84 }, // 日本最大の村・山間部
+        { name: "十津川村", lat: 34.02, lon: 135.84 },
         { name: "和歌山市", lat: 34.23, lon: 135.17 },
-        { name: "田辺市", lat: 33.93, lon: 135.48 }, // 紀伊半島南西
-        { name: "串本町", lat: 33.47, lon: 135.78 }, // 本州最南端
+        { name: "田辺市", lat: 33.93, lon: 135.48 },
+        { name: "串本町", lat: 33.47, lon: 135.78 },
         { name: "淡路島", lat: 34.34, lon: 134.89 }
     ],
     "中国": [
@@ -902,31 +908,31 @@ const locations = {
         { name: "松江市", lat: 35.47, lon: 133.05 },
         { name: "出雲市", lat: 35.36, lon: 132.75 },
         { name: "隠岐(海士町)", lat: 36.10, lon: 133.10 },
-        { name: "津山市", lat: 35.06, lon: 134.00 }, // 中国山地の盆地
+        { name: "津山市", lat: 35.06, lon: 134.00 },
         { name: "岡山市", lat: 34.66, lon: 133.92 },
         { name: "倉敷市", lat: 34.58, lon: 133.77 },
         { name: "広島市", lat: 34.39, lon: 132.46 },
         { name: "福山市", lat: 34.48, lon: 133.36 },
-        { name: "三次市", lat: 34.80, lon: 132.85 }, // 山間部・霧の町
+        { name: "三次市", lat: 34.80, lon: 132.85 },
         { name: "呉市", lat: 34.25, lon: 132.57 },
         { name: "山口市", lat: 34.18, lon: 131.47 },
-        { name: "下関市", lat: 33.95, lon: 130.93 }, // 関門海峡
+        { name: "下関市", lat: 33.95, lon: 130.93 },
         { name: "岩国市", lat: 34.17, lon: 132.22 }
     ],
     "四国": [
         { name: "松山市", lat: 33.84, lon: 132.77 },
         { name: "今治市", lat: 34.07, lon: 133.00 },
         { name: "新居浜市", lat: 33.96, lon: 133.28 },
-        { name: "宇和島市", lat: 33.22, lon: 132.56 }, // 南予
+        { name: "宇和島市", lat: 33.22, lon: 132.56 },
         { name: "高松市", lat: 34.34, lon: 134.04 },
         { name: "丸亀市", lat: 34.29, lon: 133.79 },
         { name: "観音寺市", lat: 34.12, lon: 133.65 },
         { name: "徳島市", lat: 34.07, lon: 134.55 },
         { name: "阿南市", lat: 33.92, lon: 134.65 },
-        { name: "三好市(池田)", lat: 34.02, lon: 133.80 }, // 四国山地・秘境
+        { name: "三好市(池田)", lat: 34.02, lon: 133.80 },
         { name: "高知市", lat: 33.56, lon: 133.53 },
-        { name: "四万十市", lat: 32.99, lon: 132.93 }, // 国内最高温を記録する地
-        { name: "室戸市", lat: 33.28, lon: 134.15 }  // 台風の通り道
+        { name: "四万十市", lat: 32.99, lon: 132.93 },
+        { name: "室戸市", lat: 33.28, lon: 134.15 }
     ],
     "九州": [
         { name: "福岡市", lat: 33.59, lon: 130.40 },
@@ -943,7 +949,7 @@ const locations = {
         { name: "出水市", lat: 32.08, lon: 130.35 },
         { name: "屋久島", lat: 30.34, lon: 130.51 }
     ],
-    "沖縄": [
+    "沖縄・南方": [
         { name: "那覇市", lat: 26.21, lon: 127.68 },
         { name: "与那国島", lat: 24.47, lon: 123.01 },
         { name: "石垣市", lat: 24.34, lon: 124.16 },
@@ -967,7 +973,6 @@ const locations = {
         { name: "アムンゼン・スコット基地(南極点)", lat: -90.0, lon: 0.0 } // 地球の底
     ]
 };
-    // 1. 全地点をフラットな配列に展開
     const allPoints = [];
     for (const region in locations) {
         locations[region].forEach(loc => {
@@ -975,27 +980,20 @@ const locations = {
         });
     }
 
-    // 2. 緯度・経度を連結して一括リクエスト
-    // hourly（時間別）で天気コード、気温、降水確率を取得
     const lats = allPoints.map(p => p.lat).join(',');
     const lons = allPoints.map(p => p.lon).join(',');
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&hourly=weathercode,temperature_2m,precipitation_probability&timezone=Asia%2FTokyo`;
 
-    let report = mode === 'morning' ? "☀️ 本日の天気予報をお知らせします\n\n" : "🌙 明日の天気予報をお知らせします\n\n";
-    
-    // 表示する時間帯のインデックス（0時を起点とした経過時間）を計算
-    // modeがmorningなら当日(0h〜)、tomorrowなら翌日(24h〜)
+    let report = mode === 'morning' ? "☀️ 本日の広域予報\n\n" : "🌙 明日の広域予報\n\n";
     const baseHour = mode === 'morning' ? 0 : 24;
-    const amIdx = baseHour + 9;  // 午前9時
-    const pmIdx = baseHour + 15; // 午後15時
+    const amIdx = baseHour + 9;  // 9:00
+    const pmIdx = baseHour + 15; // 15:00
 
     try {
-        console.log(`🌐 ${allPoints.length}地点の時系列データを一括取得中...`);
         const res = await fetch(url);
         const data = await res.json();
         const results = Array.isArray(data) ? data : [data];
 
-        // 天気コードを絵文字に変換するサブ関数
         const getEmoji = (code) => {
             if (code <= 1) return "☀️";
             if (code <= 3) return "⛅";
@@ -1015,38 +1013,29 @@ const locations = {
             return "☁️";
         };
 
-        // 3. レポート作成
         let currentIndex = 0;
         for (const region in locations) {
             report += `【${region}】\n`;
-            
             for (const loc of locations[region]) {
                 const h = results[currentIndex].hourly;
-                
-                // 午前(9時)のデータ
                 const amEmoji = getEmoji(h.weathercode[amIdx]);
                 const amTemp = Math.round(h.temperature_2m[amIdx]);
-                
-                // 午後(15時)のデータ
                 const pmEmoji = getEmoji(h.weathercode[pmIdx]);
                 const pmTemp = Math.round(h.temperature_2m[pmIdx]);
                 
-                // 降水確率はその日の最大値を代表として表示（利便性のため）
+                // 降水確率はその日の最大値を採用
                 const dayProb = Math.max(...h.precipitation_probability.slice(baseHour, baseHour + 24));
 
-                // 表示形式: 地点名: [午前] ☀️ 20℃ | [午後] ⛅ 24℃ (降水 10%)
+                // 出力例: 横浜市: ☀️14℃→⛅18℃ (10%)
                 report += `${loc.name}: ${amEmoji}${amTemp}℃→${pmEmoji}${pmTemp}℃ (${dayProb}%)\n`;
-                
                 currentIndex++;
             }
             report += "\n";
         }
-
     } catch (e) {
-        console.error("🚨 天気一括取得エラー:", e);
-        return "⚠️ 天気データの取得に失敗しました。";
+        console.error("🚨 エラー:", e);
+        return "⚠️ データ取得エラーが発生しました。";
     }
-
     return report;
 }
 // ================================
