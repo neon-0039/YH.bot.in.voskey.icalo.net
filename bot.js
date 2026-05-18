@@ -363,7 +363,7 @@ async function handleMentions(me) {
 // 🧠 マルコフモード処理
 // ================================
 async function handleMarkovMode(me) {
-    const tl = await mk.request('notes/hybrid-timeline', { limit: 72 });
+    const tl = await mk.request('notes/home-timeline', { limit: 72 });
 
     const tl_text = tl
         .filter(n => n.text && n.user.id !== me.id)
@@ -1150,7 +1150,7 @@ async function main() {
 
         // タイムライン取得
         console.log("👉 タイムラインを取得します...");
-        const tlRaw = await requestToMk('notes/hybrid-timeline', { limit: 72 });
+        const tlRaw = await requestToMk('notes/home-timeline', { limit: 72 });
         const tl = Array.isArray(tlRaw) ? tlRaw : (tlRaw?.notes || []);
 
         const tl_text = tl
