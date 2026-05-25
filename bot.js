@@ -701,7 +701,7 @@ const locationsGroupA = {
         { name: "大宮", lat: 35.91, lon: 139.63 },
         { name: "成田市", lat: 35.78, lon: 140.31 },
         { name: "千葉市", lat: 35.61, lon: 140.12 },
-        { name: "東京都", lat: 35.69, lon: 139.69 },
+        { name: "東京都(新宿区)", lat: 35.69, lon: 139.69 },
         { name: "八王子市", lat: 35.66, lon: 139.33 },
         { name: "横浜市", lat: 35.44, lon: 139.64 },
         { name: "箱根町", lat: 35.23, lon: 139.10 },
