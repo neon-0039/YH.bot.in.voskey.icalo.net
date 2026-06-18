@@ -550,6 +550,7 @@ function cleanBrain(brain) {
         (key) => key.includes('@'),
         (key) => key.includes('[') || key.includes(']'),
         (key) => key.includes('$'),
+        (key) => key.includes('死'),
         (key) => /[\uD800-\uDBFF]/.test(key),
         (key) => /[\uDC00-\uDFFF]/.test(key),
         (key) => key.includes('_'),
@@ -932,7 +933,7 @@ function generateMarkov(words, brain) {
         }
 
         let attempts = 0;
-        while (/(マルコフ|おみくじ|タイムライン|@|#)/.test(candidate) && attempts < 5) {
+        while (/(マルコフ|おみくじ|タイムライン|@|#|死)/.test(candidate) && attempts < 5) {
             candidate = words[Math.floor(Math.random() * words.length)];
             attempts++;
         }
