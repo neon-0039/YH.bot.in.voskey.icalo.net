@@ -7,7 +7,7 @@ import axios from 'axios';
 import { google } from 'googleapis';
 import http from 'http';
 import https from 'https';
-import { createSudachiTokenizer } from 'sudachi';
+import Janome from 'janome';
 
 console.log("=== DEBUG START ===");
 
@@ -50,43 +50,23 @@ validateEnv();
 // 🧩 共通ユーティリティ
 // ================================
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-let tokenizer = null;
+const janome = new Janome();
 const particles = ["が", "の", "を", "と", "に", "から", "は", "も", "で"];
 
 // ================================
-// 🔤 Sudachi初期化（高精度形態素解析）
+// 🔤 形態素解析（Janome版）
 // ================================
-async function initializeTokenizer() {
+function segmentWithJanome(text) {
     try {
-        console.log("🔄 Sudachi 初期化中...");
-        tokenizer = await createSudachiTokenizer();
-        console.log("✅ Sudachi tokenizer initialized (高精度モード)");
-        return;
-    } catch (err) {
-        console.error("❌ Sudachi 初期化失敗:", err.message);
-        throw new Error("形態素解析エンジンの初期化に失敗しました");
-    }
-}
-
-// ================================
-// 🔤 形態素解析（Sudachi版）
-// ================================
-function segmentWithSudachi(text) {
-    if (!tokenizer) {
-        console.warn("⚠️ トークナイザーが初期化されていません");
-        return [];
-    }
-
-    try {
-        const tokens = tokenizer.tokenize(text);
+        const tokens = janome.tokenize(text);
         const excludePOS = ['助詞', '助動詞', '接尾辞', '記号', '接続詞'];
 
         return tokens
             .filter(token => {
-                const pos = token.partOfSpeech()[0];
+                const pos = token.pos[0];
                 return !excludePOS.includes(pos);
             })
-            .map(token => token.surface())
+            .map(token => token.surface_form)
             .filter(s => s && s.trim() !== "");
     } catch (err) {
         console.error("形態素解析エラー:", err.message);
@@ -322,8 +302,6 @@ async function handleFollowControl(my_id) {
 }
 
 // ================================
-// 💬 メンション処理
-// ================================
 async function handleMentions(me) {
     console.log("メンション確認中...");
 
@@ -412,7 +390,8 @@ async function handleMarkovMode(me) {
         .slice(0, 64)
         .join(" ");
 
-    const words = segmentWithSudachi(tl_text);
+    const regex = /[\u4E00-\u9FFF]+|[\u3040-\u309F]+|[\u30A0-\u30FF]+|[\uFF65-\uFF9F]+|[a-zA-Z0-9]+|[^\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\sa-zA-Z0-9]+/g;
+    const words = tl_text.match(regex) || [];
 
     if (words.length === 0) {
         return "（タイムラインに材料がありません）";
@@ -1117,9 +1096,6 @@ async function main() {
     try {
         console.log("=== API Connection Check ===");
 
-        // Sudachi初期化
-        await initializeTokenizer();
-
         const domain = (process.env.MK_DOMAIN || "").trim().replace(/^https?:\/\//, '').split('/')[0];
         const token = (process.env.MK_TOKEN || "").trim();
 
@@ -1244,8 +1220,9 @@ async function main() {
             .map(n => n.text.replace(/https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-]+/g, '').trim())
             .join(" ");
 
-        // 形態素解析（Sudachi版）
-        const words = segmentWithSudachi(tl_text);
+        // 形態素解析（Regex版 - 高精度）
+        const regex = /[\u4E00-\u9FFF]+|[\u3040-\u309F]+|[\u30A0-\u30FF]+|[\uFF65-\uFF9F]+|[a-zA-Z0-9]+|[^\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\sa-zA-Z0-9]+/g;
+        const words = tl_text.match(regex) || [];
         console.log(`【分析実行】総単語数: ${words.length}`);
 
         // 学習
