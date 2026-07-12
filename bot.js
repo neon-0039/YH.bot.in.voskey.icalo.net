@@ -7,7 +7,6 @@ import axios from 'axios';
 import { google } from 'googleapis';
 import http from 'http';
 import https from 'https';
-import Janome from 'janome';
 
 console.log("=== DEBUG START ===");
 
