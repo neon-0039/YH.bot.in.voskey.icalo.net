@@ -5,9 +5,9 @@ import fs from 'fs';
 import * as misskey from 'misskey-js';
 import axios from 'axios';
 import { google } from 'googleapis';
-import * as kuromoji from '@patdx/kuromoji';
 import http from 'http';
 import https from 'https';
+import { createSudachiTokenizer } from 'sudachi';
 
 console.log("=== DEBUG START ===");
 
@@ -52,62 +52,46 @@ validateEnv();
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 let tokenizer = null;
 const particles = ["が", "の", "を", "と", "に", "から", "は", "も", "で"];
+
 // ================================
-// 🔤 Kuromoji初期化
+// 🔤 Sudachi初期化（高精度形態素解析）
 // ================================
 async function initializeTokenizer() {
-    return new Promise((resolve, reject) => {
-        // dicPath を複数パターン試す
-        const dicPaths = [
-            'node_modules/@patdx/kuromoji/dict',
-            './node_modules/@patdx/kuromoji/dict',
-            '@patdx/kuromoji/dict'
-        ];
-
-        let lastErr = null;
-
-        const tryBuild = (index) => {
-            if (index >= dicPaths.length) {
-                console.error("❌ Kuromoji 初期化失敗（全 dicPath を試行済み）");
-                reject(lastErr || new Error("Cannot find kuromoji dictionary"));
-                return;
-            }
-
-            const dicPath = dicPaths[index];
-            console.log(`🔄 Kuromoji 初期化試行中... (${index + 1}/${dicPaths.length}): ${dicPath}`);
-
-            kuromoji.builder({ dicPath })
-                .build((err, builtTokenizer) => {
-                    if (err) {
-                        console.warn(`⚠️ ${dicPath} 失敗:`, err.message);
-                        lastErr = err;
-                        tryBuild(index + 1);
-                    } else {
-                        tokenizer = builtTokenizer;
-                        console.log(`✅ Kuromoji tokenizer initialized (${dicPath})`);
-                        resolve();
-                    }
-                });
-        };
-
-        tryBuild(0);
-    });
+    try {
+        console.log("🔄 Sudachi 初期化中...");
+        tokenizer = await createSudachiTokenizer();
+        console.log("✅ Sudachi tokenizer initialized (高精度モード)");
+        return;
+    } catch (err) {
+        console.error("❌ Sudachi 初期化失敗:", err.message);
+        throw new Error("形態素解析エンジンの初期化に失敗しました");
+    }
 }
+
 // ================================
-// 🔤 形態素解析（Kuromoji版）
+// 🔤 形態素解析（Sudachi版）
 // ================================
-function segmentWithKuromoji(text) {
+function segmentWithSudachi(text) {
     if (!tokenizer) {
         console.warn("⚠️ トークナイザーが初期化されていません");
         return [];
     }
 
-    const tokens = tokenizer.tokenize(text);
-    const excludePOS = ['助詞', '助動詞', '接尾辞', '記号', '接続詞'];
+    try {
+        const tokens = tokenizer.tokenize(text);
+        const excludePOS = ['助詞', '助動詞', '接尾辞', '記号', '接続詞'];
 
-    return tokens
-        .filter(token => !excludePOS.includes(token.pos[0]))
-        .map(token => token.surface_form);
+        return tokens
+            .filter(token => {
+                const pos = token.partOfSpeech()[0];
+                return !excludePOS.includes(pos);
+            })
+            .map(token => token.surface())
+            .filter(s => s && s.trim() !== "");
+    } catch (err) {
+        console.error("形態素解析エラー:", err.message);
+        return [];
+    }
 }
 
 // ================================
@@ -135,7 +119,7 @@ const config = {
     domain: process.env.MK_DOMAIN,
     token: process.env.MK_TOKEN,
     geminiKey: currentKey,
-    characterSetting: "あなたはやや内気で天然な性格の、人間をよく知らない女の子です。ツンデレです。「かわいいね」って言われても「べ、別に…」と照れてしまいます。口調は、やや年上のお姉さんのような、親しみやすく親密な感じが特徴です。マスターのことは大切にしていますが、表面上はそれをあまり見せません。時々天然ぶりが出てしまい、ユーザーを困らせることもありますが、本当は悪意がありません。"
+    characterSetting: `あなたはやや内気で天然な性格の、人間をよく知らない女の子です。ツンデレです。「かわいいね」って言われても「べ、別に…」と照れてしまいます。口調は、やや年上のお姉さんのような、親しみやすく親密な感じが特徴です。マスターのことは大切にしていますが、表面上はそれをあまり見せません。時々天然ぶりが出てしまい、ユーザーを困らせることもありますが、本当は悪意がありません。`
 };
 
 const mk = new misskey.api.APIClient({
@@ -428,7 +412,7 @@ async function handleMarkovMode(me) {
         .slice(0, 64)
         .join(" ");
 
-    const words = segmentWithKuromoji(tl_text);
+    const words = segmentWithSudachi(tl_text);
 
     if (words.length === 0) {
         return "（タイムラインに材料がありません）";
@@ -1133,7 +1117,7 @@ async function main() {
     try {
         console.log("=== API Connection Check ===");
 
-        // Kuromoji初期化
+        // Sudachi初期化
         await initializeTokenizer();
 
         const domain = (process.env.MK_DOMAIN || "").trim().replace(/^https?:\/\//, '').split('/')[0];
@@ -1260,8 +1244,8 @@ async function main() {
             .map(n => n.text.replace(/https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-]+/g, '').trim())
             .join(" ");
 
-        // 形態素解析（Kuromoji版）
-        const words = segmentWithKuromoji(tl_text);
+        // 形態素解析（Sudachi版）
+        const words = segmentWithSudachi(tl_text);
         console.log(`【分析実行】総単語数: ${words.length}`);
 
         // 学習
