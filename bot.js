@@ -49,7 +49,6 @@ validateEnv();
 // 🧩 共通ユーティリティ
 // ================================
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-const janome = new Janome();
 const particles = ["が", "の", "を", "と", "に", "から", "は", "も", "で"];
 
 // ================================
