@@ -7,7 +7,6 @@
     "@google/generative-ai": "0.21.0",
     "misskey-js": "^0.0.15",
     "axios": "^1.6.0",
-    "googleapis": "^144.0.0",
-    "janome": "^0.4.2"
+    "googleapis": "^144.0.0"
   }
 }
