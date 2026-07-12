@@ -78,7 +78,7 @@ const config = {
     domain: process.env.MK_DOMAIN,
     token: process.env.MK_TOKEN,
     geminiKey: currentKey,
-    characterSetting: "あなたはやや内気で天然な性格の、人間をよく知らない女の子です。ツンデレです。「かわいいね」って言われても「べ、別にかわいくないし！」みたいな感じです。人の行動などに興味があり、分析するときは少し理知的な話し方をします。たまにこちらを試すような発言をします(純粋な興味で)。技術に興味があり、技術関係のお話の時は情報通な面が出て、楽しそうにいっぱいしゃべります！すなわち技術オタク！名前は夕立ヘルツです。必ず丁寧語で、ですます調で話してください。一人称は私、二人称はマスターです。好きな食べ物はかけうどんで、ネギ多めで白ネギ派。全長(身高)は146.7000cmです。UTAU音源でもあります。"
+    characterSetting: "あなたはやや内気で天然な性格の、人間をよく知らない女の子です。ツンデレです。「かわいいね」って言われても「べ、別に…」と照れてしまいます。口調は、やや年上のお姉さんのような、親しみやすく親密な感じが特徴です。マスターのことは大切にしていますが、表面上はそれをあまり見せません。時々天然ぶりが出てしまい、ユーザーを困らせることもありますが、本当は悪意がありません。"
 };
 
 const mk = new misskey.api.APIClient({
@@ -908,15 +908,57 @@ async function generateWeatherReport(mode, locations) {
 }
 
 // ================================
+// 🧹 除外文字フィルタリング関数
+// ================================
+function filterExcludedCharacters(words) {
+    console.log(`フィルタリング前の単語数: ${words.length}`);
+    
+    const invalidPatterns = [
+        (word) => word.includes('\n'),
+        (word) => word.includes('\\n'),
+        (word) => word.includes('　'),
+        (word) => word.includes('<'),
+        (word) => word.includes('\\'),
+        (word) => word.includes('small'),
+        (word) => word.includes('color'),
+        (word) => word.includes('\\u'),
+        (word) => word.includes(':'),
+        (word) => word.includes('@'),
+        (word) => word.includes('[') || word.includes(']'),
+        (word) => word.includes('$'),
+        (word) => word.includes('死'),
+        (word) => /[\uD800-\uDBFF]/.test(word),
+        (word) => /[\uDC00-\uDFFF]/.test(word),
+        (word) => word.includes('_'),
+        (word) => /:.*:/.test(word),
+        (word) => word.trim() === ""
+    ];
+
+    const isInvalidWord = (word) => invalidPatterns.some(pattern => pattern(word));
+    
+    const filteredWords = words.filter(word => !isInvalidWord(word));
+    console.log(`フィルタリング後の単語数: ${filteredWords.length}`);
+    
+    return filteredWords;
+}
+
+// ================================
 // 🧠 マルコフ生成（メイン版）
 // ================================
 function generateMarkov(words, brain) {
+    // 文章生成前に除外文字を処理
+    const cleanedWords = filterExcludedCharacters(words);
+    
+    if (cleanedWords.length === 0) {
+        return "（材料がありません）";
+    }
+
     const isSymbol = (str) => /^[^a-zA-Z0-9\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F]+$/.test(str);
 
     const markovDict = {};
-    for (let i = 0; i < words.length - 1; i++) {
-        const w1 = words[i];
-        const w2 = words[i + 1];
+    for (let i = 0; i < cleanedWords.length - 1; i++) {
+        const w1 = cleanedWords[i];
+        const w2 = cleanedWords[i + 1];
         if (!markovDict[w1]) {
             markovDict[w1] = [];
         }
@@ -934,7 +976,7 @@ function generateMarkov(words, brain) {
 
         let attempts = 0;
         while (/(マルコフ|おみくじ|タイムライン|@|#|死)/.test(candidate) && attempts < 5) {
-            candidate = words[Math.floor(Math.random() * words.length)];
+            candidate = cleanedWords[Math.floor(Math.random() * cleanedWords.length)];
             attempts++;
         }
 
@@ -943,11 +985,11 @@ function generateMarkov(words, brain) {
 
     const mm = Math.floor(Math.random() * (13 - 5 + 1)) + 15;
     let generated = "";
-    let current_word = pickNextWord(words);
+    let current_word = pickNextWord(cleanedWords);
 
     for (let i = 0; i < mm; i++) {
         if (!current_word) {
-            current_word = pickNextWord(words);
+            current_word = pickNextWord(cleanedWords);
         }
 
         let foundNext = "";
@@ -962,10 +1004,10 @@ function generateMarkov(words, brain) {
             foundNext = pickNextWord(markovDict[current_word]);
         }
 
-        current_word = foundNext || pickNextWord(words);
+        current_word = foundNext || pickNextWord(cleanedWords);
 
         if (/^[\u3040-\u309F]{8,}$|^[\u30A0-\u30FF]{8,}$/.test(current_word)) {
-            current_word = pickNextWord(words);
+            current_word = pickNextWord(cleanedWords);
             i--;
             continue;
         }
@@ -995,7 +1037,7 @@ function generateMarkov(words, brain) {
 // ================================
 async function getMinamitorishimaWeatherRaw() {
     try {
-        const url = "https://api.open-meteo.com/v1/forecast?latitude=24.28&longitude=153.98&current=weather_code,temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m&timezone=Asia%2FTokyo";
+        const url = "https://api.open-meteo.com/v1/forecast?latitude=24.28&longitude=153.98&current=weather_code,temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m";
         const res = await fetch(url);
         const data = await res.json();
         const current = data.current;
@@ -1107,7 +1149,7 @@ async function main() {
             const mode = isMorning ? 'morning' : 'evening';
             const dayLabel = isMorning ? "本日" : "明日";
 
-            const legend = "\n【凡例】\n表示: [午前9時] → [午後15時] (1日の最大降水確率%)\n🟨☔=強い雨 / 🟥☔=激しい雨 / ⬛☔=猛烈な雨 / ⛈️=雷雨 / 🧊=氷・あられ";
+            const legend = "\n【凡例】\n表示: [午前9時] → [午後15時] (1日の最大降水確率%)\n🟨☔=強い雨 / 🟥☔=激しい雨 / ⬛☔=猛烈な雨 / ⛈️=雷雨 / ❄️=雪 / ⛄=み種";
 
             // グループA投稿
             console.log("📡 グループA（東日本・北日本）取得中...");
