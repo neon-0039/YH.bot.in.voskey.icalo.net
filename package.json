@@ -8,6 +8,6 @@
     "misskey-js": "^0.0.15",
     "axios": "^1.6.0",
     "googleapis": "^144.0.0",
-    "kuromoji": "^0.4.2"
+    "kuromoji": "0.2.27"
   }
 }
