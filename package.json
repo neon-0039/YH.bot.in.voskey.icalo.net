@@ -8,6 +8,6 @@
     "misskey-js": "^0.0.15",
     "axios": "^1.6.0",
     "googleapis": "^144.0.0",
-    "sudachi": "^0.6.0"
+    "janome": "^0.4.2"
   }
 }
