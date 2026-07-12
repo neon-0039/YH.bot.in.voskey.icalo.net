@@ -5,7 +5,7 @@ import fs from 'fs';
 import * as misskey from 'misskey-js';
 import axios from 'axios';
 import { google } from 'googleapis';
-import TinySegmenter from 'tiny-segmenter';
+import kuromoji from 'kuromoji';
 import http from 'http';
 import https from 'https';
 
@@ -50,8 +50,44 @@ validateEnv();
 // 🧩 共通ユーティリティ
 // ================================
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-const segmenter = new TinySegmenter();
+let tokenizer = null;
 const particles = ["が", "の", "を", "と", "に", "から", "は", "も", "で"];
+
+// ================================
+// 🔤 Kuromoji初期化
+// ================================
+async function initializeTokenizer() {
+    return new Promise((resolve, reject) => {
+        kuromoji.builder({ dicPath: 'node_modules/kuromoji/dict' })
+            .build((err, builtTokenizer) => {
+                if (err) {
+                    console.error("トークナイザー初期化エラー:", err);
+                    reject(err);
+                } else {
+                    tokenizer = builtTokenizer;
+                    console.log("✅ Kuromoji tokenizer initialized");
+                    resolve();
+                }
+            });
+    });
+}
+
+// ================================
+// 🔤 形態素解析（Kuromoji版）
+// ================================
+function segmentWithKuromoji(text) {
+    if (!tokenizer) {
+        console.warn("⚠️ トークナイザーが初期化されていません");
+        return [];
+    }
+
+    const tokens = tokenizer.tokenize(text);
+    const excludePOS = ['助詞', '助動詞', '接尾辞', '記号', '接続詞'];
+
+    return tokens
+        .filter(token => !excludePOS.includes(token.pos[0]))
+        .map(token => token.surface_form);
+}
 
 // ================================
 // 🔑 APIキー管理（時間切替）
@@ -371,8 +407,7 @@ async function handleMarkovMode(me) {
         .slice(0, 64)
         .join(" ");
 
-    const regex = /[\u4E00-\u9FFF]+|[\u3040-\u309F]+|[\u30A0-\u30FF]+|[\uFF65-\uFF9F]+|[a-zA-Z0-9]+|[^\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\sa-zA-Z0-9]+/g;
-    const words = tl_text.match(regex) || [];
+    const words = segmentWithKuromoji(tl_text);
 
     if (words.length === 0) {
         return "（タイムラインに材料がありません）";
@@ -1077,6 +1112,9 @@ async function main() {
     try {
         console.log("=== API Connection Check ===");
 
+        // Kuromoji初期化
+        await initializeTokenizer();
+
         const domain = (process.env.MK_DOMAIN || "").trim().replace(/^https?:\/\//, '').split('/')[0];
         const token = (process.env.MK_TOKEN || "").trim();
 
@@ -1201,8 +1239,8 @@ async function main() {
             .map(n => n.text.replace(/https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-]+/g, '').trim())
             .join(" ");
 
-        // 形態素解析
-        const words = segmenter.segment(tl_text);
+        // 形態素解析（Kuromoji版）
+        const words = segmentWithKuromoji(tl_text);
         console.log(`【分析実行】総単語数: ${words.length}`);
 
         // 学習
