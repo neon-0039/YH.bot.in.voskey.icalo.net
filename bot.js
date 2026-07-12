@@ -568,6 +568,7 @@ function cleanBrain(brain) {
         (key) => key.includes('[') || key.includes(']'),
         (key) => key.includes('$'),
         (key) => key.includes('死'),
+        (key) => key.includes('blob'),
         (key) => /[\uD800-\uDBFF]/.test(key),
         (key) => /[\uDC00-\uDFFF]/.test(key),
         (key) => key.includes('_'),
@@ -927,38 +928,82 @@ async function generateWeatherReport(mode, locations) {
 // ================================
 // 🧹 除外文字フィルタリング関数
 // ================================
-function filterExcludedCharacters(words) {
-    console.log(`フィルタリング前の単語数: ${words.length}`);
-    
-    const invalidPatterns = [
-        (word) => word.includes('\n'),
-        (word) => word.includes('\\n'),
-        (word) => word.includes('　'),
-        (word) => word.includes('<'),
-        (word) => word.includes('\\'),
-        (word) => word.includes('small'),
-        (word) => word.includes('color'),
-        (word) => word.includes('\\u'),
-        (word) => word.includes(':'),
-        (word) => word.includes('@'),
-        (word) => word.includes('[') || word.includes(']'),
-        (word) => word.includes('$'),
-        (word) => word.includes('死'),
-        (word) => /[\uD800-\uDBFF]/.test(word),
-        (word) => /[\uDC00-\uDFFF]/.test(word),
-        (word) => word.includes('_'),
-        (word) => /:.*:/.test(word),
-        (word) => word.trim() === ""
-    ];
+// ================================
+// 🧹 脳クリーニング
+// ================================
+function cleanBrain(brain) {
+    console.log("🧹 脳のクリーニング中...");
 
-    const isInvalidWord = (word) => invalidPatterns.some(pattern => pattern(word));
-    
-    const filteredWords = words.filter(word => !isInvalidWord(word));
-    console.log(`フィルタリング後の単語数: ${filteredWords.length}`);
-    
-    return filteredWords;
+    Object.keys(brain).forEach(key => {
+        const isInvalidKey =
+            key.includes('\n') ||
+            key.includes('\\n') ||
+            key.includes('　') ||
+            key.includes('<') ||
+            key.includes('\\') ||
+            key.includes('small') ||
+            key.includes('color') ||
+            key.includes('\\u') ||
+            key.includes(':') ||
+            key.includes('@') ||
+            key.includes('[') ||
+            key.includes(']') ||
+            key.includes('$') ||
+            key.includes('>') ||
+            key.includes('Shi') ||
+            key.includes('/') ||
+            key.includes('​') ||  // ゼロ幅スペース
+            key.includes('‼️') || // 不可視文字・絵文字コード
+            key.includes('blob')||
+            /[\uD800-\uDBFF]/.test(key) ||
+            /[\uDC00-\uDFFF]/.test(key) ||
+            key.includes('_') ||
+            /:.*:/.test(key) ||
+            /^[:＿]+$/.test(key) ||  // : や _ のみの行
+            key.match(/emoji|code|image|html/i);  // emoji や code 関連キーワード
+
+        let list = brain[key];
+
+        if (Array.isArray(list)) {
+            brain[key] = list.filter(w => {
+                if (typeof w !== 'string') return false;
+                if (
+                    w.includes('\\n') ||
+                    w.includes('　') ||
+                    w.includes('@') ||
+                    w.includes('<') ||
+                    w.includes('\\') ||
+                    w.includes('small') ||
+                    w.includes('color') ||
+                    w.includes('\\u') ||
+                    w.includes(':') ||
+                    w.includes('_') ||
+                    w.includes('[') ||
+                    w.includes(']') ||
+                    w.includes('$') ||
+                    w.includes('>') ||
+                    w.includes('Shi') ||
+                    w.includes('/') ||
+                    w.includes('​') ||  // ゼロ幅スペース
+                    w.includes('blob')||
+                    w.includes('‼️') ||
+                    /[\uD800-\uDBFF]/.test(w) ||
+                    /[\uDC00-\uDFFF]/.test(w) ||
+                    /^[:＿]+$/.test(w) ||
+                    w.match(/emoji|code|image|html/i)
+                ) return false;
+                return w.trim() !== "";
+            });
+        }
+
+        if (isInvalidKey || !brain[key] || brain[key].length === 0) {
+            delete brain[key];
+        }
+    });
+
+    console.log("✅ 脳のクリーニング完了！");
+    return brain;
 }
-
 // ================================
 // 🧠 マルコフ生成（メイン版）
 // ================================
