@@ -11,3 +11,7 @@
     "@patdx/kuromoji": "1.0.4"
   }
 }
+"dependencies": {
+    "sudachi": "^0.6.0"
+  }
+}
