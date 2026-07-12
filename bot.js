@@ -52,26 +52,47 @@ validateEnv();
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 let tokenizer = null;
 const particles = ["が", "の", "を", "と", "に", "から", "は", "も", "で"];
-
 // ================================
 // 🔤 Kuromoji初期化
 // ================================
 async function initializeTokenizer() {
     return new Promise((resolve, reject) => {
-        kuromoji.builder({ dicPath: 'node_modules/@patdx/kuromoji/dict' })
-            .build((err, builtTokenizer) => {
-                if (err) {
-                    console.error("トークナイザー初期化エラー:", err);
-                    reject(err);
-                } else {
-                    tokenizer = builtTokenizer;
-                    console.log("✅ Kuromoji tokenizer initialized");
-                    resolve();
-                }
-            });
+        // dicPath を複数パターン試す
+        const dicPaths = [
+            'node_modules/@patdx/kuromoji/dict',
+            './node_modules/@patdx/kuromoji/dict',
+            '@patdx/kuromoji/dict'
+        ];
+
+        let lastErr = null;
+
+        const tryBuild = (index) => {
+            if (index >= dicPaths.length) {
+                console.error("❌ Kuromoji 初期化失敗（全 dicPath を試行済み）");
+                reject(lastErr || new Error("Cannot find kuromoji dictionary"));
+                return;
+            }
+
+            const dicPath = dicPaths[index];
+            console.log(`🔄 Kuromoji 初期化試行中... (${index + 1}/${dicPaths.length}): ${dicPath}`);
+
+            kuromoji.builder({ dicPath })
+                .build((err, builtTokenizer) => {
+                    if (err) {
+                        console.warn(`⚠️ ${dicPath} 失敗:`, err.message);
+                        lastErr = err;
+                        tryBuild(index + 1);
+                    } else {
+                        tokenizer = builtTokenizer;
+                        console.log(`✅ Kuromoji tokenizer initialized (${dicPath})`);
+                        resolve();
+                    }
+                });
+        };
+
+        tryBuild(0);
     });
 }
-
 // ================================
 // 🔤 形態素解析（Kuromoji版）
 // ================================
