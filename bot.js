@@ -5,7 +5,7 @@ import fs from 'fs';
 import * as misskey from 'misskey-js';
 import axios from 'axios';
 import { google } from 'googleapis';
-import kuromoji from '@patdx/kuromoji';
+import * as kuromoji from '@patdx/kuromoji';
 import http from 'http';
 import https from 'https';
 
