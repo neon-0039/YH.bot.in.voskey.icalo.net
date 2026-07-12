@@ -5,7 +5,7 @@ import fs from 'fs';
 import * as misskey from 'misskey-js';
 import axios from 'axios';
 import { google } from 'googleapis';
-import kuromoji from 'kuromoji';
+import kuromoji from '@patdx/kuromoji';
 import http from 'http';
 import https from 'https';
 
@@ -58,7 +58,7 @@ const particles = ["が", "の", "を", "と", "に", "から", "は", "も", "�
 // ================================
 async function initializeTokenizer() {
     return new Promise((resolve, reject) => {
-        kuromoji.builder({ dicPath: 'node_modules/kuromoji/dict' })
+        kuromoji.builder({ dicPath: 'node_modules/@patdx/kuromoji/dict' })
             .build((err, builtTokenizer) => {
                 if (err) {
                     console.error("トークナイザー初期化エラー:", err);
