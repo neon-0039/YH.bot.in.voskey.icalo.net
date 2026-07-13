@@ -880,6 +880,44 @@ async function generateWeatherReport(mode, locations) {
 // ================================
 // 🧹 除外文字フィルタリング関数
 // ================================
+function filterExcludedCharacters(words) {
+    console.log(`フィルタリング前の単語数: ${words.length}`);
+    
+    const invalidPatterns = [
+        (word) => word.includes('\n'),
+        (word) => word.includes('\\n'),
+        (word) => word.includes('　'),
+        (word) => word.includes('<'),
+        (word) => word.includes('\\'),
+        (word) => word.includes('small'),
+        (word) => word.includes('color'),
+        (word) => word.includes('\\u'),
+        (word) => word.includes(':'),
+        (word) => word.includes('@'),
+        (word) => word.includes('[') || word.includes(']'),
+        (word) => word.includes('$'),
+        (word) => word.includes('死'),
+        (word) => word.includes('>'),
+        (word) => word.includes('Shi'),
+        (word) => word.includes('/'),
+        (word) => word.includes('​'),
+        (word) => word.includes('‼️'),
+        (word) => /[\uD800-\uDBFF]/.test(word),
+        (word) => /[\uDC00-\uDFFF]/.test(word),
+        (word) => word.includes('_'),
+        (word) => /:.*:/.test(word),
+        (word) => /^[:＿]+$/.test(word),
+        (word) => word.match(/emoji|code|image|html/i),
+        (word) => word.trim() === ""
+    ];
+
+    const isInvalidWord = (word) => invalidPatterns.some(pattern => pattern(word));
+    
+    const filteredWords = words.filter(word => !isInvalidWord(word));
+    console.log(`フィルタリング後の単語数: ${filteredWords.length}`);
+    
+    return filteredWords;
+}
 // ================================
 // 🧹 脳クリーニング
 // ================================
