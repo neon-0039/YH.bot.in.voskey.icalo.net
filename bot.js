@@ -52,27 +52,6 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const particles = ["が", "の", "を", "と", "に", "から", "は", "も", "で"];
 
 // ================================
-// 🔤 形態素解析（Janome版）
-// ================================
-function segmentWithJanome(text) {
-    try {
-        const tokens = janome.tokenize(text);
-        const excludePOS = ['助詞', '助動詞', '接尾辞', '記号', '接続詞'];
-
-        return tokens
-            .filter(token => {
-                const pos = token.pos[0];
-                return !excludePOS.includes(pos);
-            })
-            .map(token => token.surface_form)
-            .filter(s => s && s.trim() !== "");
-    } catch (err) {
-        console.error("形態素解析エラー:", err.message);
-        return [];
-    }
-}
-
-// ================================
 // 🔑 APIキー管理（時間切替）
 // ================================
 const initializeApiKeys = () => {
@@ -300,6 +279,8 @@ async function handleFollowControl(my_id) {
 }
 
 // ================================
+// 💬 メンション処理
+// ================================
 async function handleMentions(me) {
     console.log("メンション確認中...");
 
@@ -377,79 +358,55 @@ async function handleMentions(me) {
 }
 
 // ================================
-// 🧠 マルコフモード処理
+// 🧠 マルコフモード処理（簡易版）
 // ================================
 async function handleMarkovMode(me) {
     const tl = await mk.request('notes/timeline', { limit: 72 });
 
     const tl_text = tl
-        .filter(n => n.text && n.user.id !== me.id)
+        .filter(n => n.text && n.user.id !== me.id && !n.text.includes('http'))
         .map(n => n.text.replace(/https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-]+/g, '').trim())
         .slice(0, 64)
         .join(" ");
 
-    const regex = /[\u4E00-\u9FFF]+|[\u3040-\u309F]+|[\u30A0-\u30FF]+|[\uFF65-\uFF9F]+|[a-zA-Z0-9]+|[^\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\sa-zA-Z0-9]+/g;
+    // シンプルな分割：漢字+ひらがな+カタカナ をまとめる
+    const regex = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF]+|[\uFF65-\uFF9F]+|[a-zA-Z0-9]+|[^\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\sa-zA-Z0-9]+/g;
     const words = tl_text.match(regex) || [];
 
     if (words.length === 0) {
         return "（タイムラインに材料がありません）";
     }
 
-    return generateMarkovFromWords(words);
+    return generateSimpleMarkov(words);
 }
 
 // ================================
-// 🧠 マルコフ単語生成
+// 🧠 シンプルマルコフ生成（脳を使わない）
 // ================================
-function generateMarkovFromWords(words) {
-    const markovDict = {};
-
-    for (let i = 0; i < words.length - 1; i++) {
-        const w1 = words[i];
-        const w2 = words[i + 1];
-
-        if (!markovDict[w1]) {
-            markovDict[w1] = [];
-        }
-
-        markovDict[w1].push(w2);
-    }
+function generateSimpleMarkov(words) {
+    if (words.length === 0) return "（材料がありません）";
 
     const isSymbol = (str) => /^[^a-zA-Z0-9\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F]+$/.test(str);
 
-    const pickNextWord = (list) => {
-        if (!list || list.length === 0) return "";
+    // 不要な要素をフィルタ
+    const cleanedWords = words.filter(w => w.trim() !== "" && !isSymbol(w));
 
-        let candidate = list[Math.floor(Math.random() * list.length)];
-
-        if (isSymbol(candidate) && Math.random() < 0.6) {
-            candidate = list[Math.floor(Math.random() * list.length)];
-        }
-
-        let attempts = 0;
-        while (/(マルコフ|おみくじ|タイムライン|@|#)/.test(candidate) && attempts < 5) {
-            candidate = words[Math.floor(Math.random() * words.length)];
-            attempts++;
-        }
-
-        return candidate;
-    };
+    if (cleanedWords.length === 0) return "（材料がありません）";
 
     let generated = "";
-    let current_word = pickNextWord(words);
+    let length = Math.floor(Math.random() * (10 - 6 + 1)) + 6;  // 6～10単語
 
-    for (let i = 0; i < 10; i++) {
-        if (!current_word) {
-            current_word = pickNextWord(words);
+    for (let i = 0; i < length; i++) {
+        const randomIdx = Math.floor(Math.random() * cleanedWords.length);
+        generated += cleanedWords[randomIdx];
+
+        // 句点で終わったら中断
+        if (["。", "！", "？"].some(s => cleanedWords[randomIdx].endsWith(s))) {
+            break;
         }
-
-        generated += current_word;
-
-        let next_candidates = markovDict[current_word] || words;
-        current_word = pickNextWord(next_candidates);
     }
 
-    return generated || "（言葉の断片が見つかりませんでした）";
+    return generated || "（言葉が見つかりません）";
 }
 
 // ================================
@@ -878,50 +835,6 @@ async function generateWeatherReport(mode, locations) {
 }
 
 // ================================
-// 🧹 除外文字フィルタリング関数
-// ================================
-function filterExcludedCharacters(words) {
-    console.log(`フィルタリング前の単語数: ${words.length}`);
-    
-    const invalidPatterns = [
-        (word) => word.includes('\n'),
-        (word) => word.includes('\\n'),
-        (word) => word.includes('　'),
-        (word) => word.includes('<'),
-        (word) => word.includes('(+'),
-        (word) => word.includes('(-'),
-        (word) => word.includes('\\'),
-        (word) => word.includes('small'),
-        (word) => word.includes('color'),
-        (word) => word.includes('\\u'),
-        (word) => word.includes(':'),
-        (word) => word.includes('@'),
-        (word) => word.includes('[') || word.includes(']'),
-        (word) => word.includes('$'),
-        (word) => word.includes('死'),
-        (word) => word.includes('>'),
-        (word) => word.includes('Shi'),
-        (word) => word.includes('/'),
-        (word) => word.includes('​'),
-        (word) => word.includes('‼️'),
-        (word) => /[\uD800-\uDBFF]/.test(word),
-        (word) => /[\uDC00-\uDFFF]/.test(word),
-        (word) => word.includes('_'),
-        (word) => word.includes('center'),
-        (word) => /:.*:/.test(word),
-        (word) => /^[:＿]+$/.test(word),
-        (word) => word.match(/emoji|code|image|html/i),
-        (word) => word.trim() === ""
-    ];
-
-    const isInvalidWord = (word) => invalidPatterns.some(pattern => pattern(word));
-    
-    const filteredWords = words.filter(word => !isInvalidWord(word));
-    console.log(`フィルタリング後の単語数: ${filteredWords.length}`);
-    
-    return filteredWords;
-}
-// ================================
 // 🧹 脳クリーニング
 // ================================
 function cleanBrain(brain) {
@@ -946,13 +859,13 @@ function cleanBrain(brain) {
             key.includes('Shi') ||
             key.includes('/') ||
             key.includes('​') ||
-            key.includes('center') ||  // ← 追加
-            key.includes('(+') ||  // ← 追加
-            key.includes('(-') ||  // ← 追加
+            key.includes('center') ||
+            key.includes('(+') ||
+            key.includes('(-') ||
             /[\uD800-\uDBFF]/.test(key) ||
             /[\uDC00-\uDFFF]/.test(key) ||
             /\?{3,}/.test(key) ||
-            /[^\u0000-\u0039\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]/g.test(key) ||  // ← 数字のみ許可
+            /[^\u0000-\u0039\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]/g.test(key) ||
             key.includes('_') ||
             /:.*:/.test(key) ||
             /^[:＿]+$/.test(key) ||
@@ -981,11 +894,11 @@ function cleanBrain(brain) {
                     w.includes('Shi') ||
                     w.includes('/') ||
                     w.includes('​') ||
-                    w.includes('center') ||  // ← 追加
-                    w.includes('(+') ||  // ← 追加
-                    w.includes('(-') ||  // ← 追加
+                    w.includes('center') ||
+                    w.includes('(+') ||
+                    w.includes('(-') ||
                     /\?{3,}/.test(w) ||
-                    /[^\u0000-\u0039\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]/g.test(w) ||  // ← 数字のみ許可
+                    /[^\u0000-\u0039\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]/g.test(w) ||
                     /[\uD800-\uDBFF]/.test(w) ||
                     /[\uDC00-\uDFFF]/.test(w)
                 ) return false;
@@ -1001,23 +914,21 @@ function cleanBrain(brain) {
     console.log("✅ 脳のクリーニング完了！");
     return brain;
 }
+
 // ================================
-// 🧠 マルコフ生成（メイン版）
+// 🧠 マルコフ生成（メイン版：脳を使う）
 // ================================
 function generateMarkov(words, brain) {
-    // 文章生成前に除外文字を処理
-    const cleanedWords = filterExcludedCharacters(words);
-    
-    if (cleanedWords.length === 0) {
+    if (words.length === 0) {
         return "（材料がありません）";
     }
 
     const isSymbol = (str) => /^[^a-zA-Z0-9\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F]+$/.test(str);
 
     const markovDict = {};
-    for (let i = 0; i < cleanedWords.length - 1; i++) {
-        const w1 = cleanedWords[i];
-        const w2 = cleanedWords[i + 1];
+    for (let i = 0; i < words.length - 1; i++) {
+        const w1 = words[i];
+        const w2 = words[i + 1];
         if (!markovDict[w1]) {
             markovDict[w1] = [];
         }
@@ -1035,20 +946,20 @@ function generateMarkov(words, brain) {
 
         let attempts = 0;
         while (/(マルコフ|おみくじ|タイムライン|@|#|死)/.test(candidate) && attempts < 5) {
-            candidate = cleanedWords[Math.floor(Math.random() * cleanedWords.length)];
+            candidate = words[Math.floor(Math.random() * words.length)];
             attempts++;
         }
 
         return candidate;
     };
 
-    const mm = Math.floor(Math.random() *(10 - 6 + 1)) + 6;
+    const mm = Math.floor(Math.random() * (10 - 6 + 1)) + 6;
     let generated = "";
-    let current_word = pickNextWord(cleanedWords);
+    let current_word = pickNextWord(words);
 
     for (let i = 0; i < mm; i++) {
         if (!current_word) {
-            current_word = pickNextWord(cleanedWords);
+            current_word = pickNextWord(words);
         }
 
         let foundNext = "";
@@ -1063,10 +974,10 @@ function generateMarkov(words, brain) {
             foundNext = pickNextWord(markovDict[current_word]);
         }
 
-        current_word = foundNext || pickNextWord(cleanedWords);
+        current_word = foundNext || pickNextWord(words);
 
         if (/^[\u3040-\u309F]{8,}$|^[\u30A0-\u30FF]{8,}$/.test(current_word)) {
-            current_word = pickNextWord(cleanedWords);
+            current_word = pickNextWord(words);
             i--;
             continue;
         }
@@ -1256,11 +1167,12 @@ async function main() {
         const tl = Array.isArray(tlRaw) ? tlRaw : (tlRaw?.notes || []);
 
         const tl_text = tl
-            .filter(n => n && n.text && n.user.id !== my_id && !n.text.includes('http'))  // ← http を含まないもののみ
+            .filter(n => n && n.text && n.user.id !== my_id && !n.text.includes('http'))
             .map(n => n.text.replace(/https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-]+/g, '').trim())
             .join(" ");
-        // 形態素解析（Regex版 - 高精度）
-        const regex = /[\u4E00-\u9FFF]+|[\u3040-\u309F]+|[\u30A0-\u30FF]+|[\uFF65-\uFF9F]+|[a-zA-Z0-9]+|[^\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\sa-zA-Z0-9]+/g;
+
+        // 改善版 regex：「謝」と「る」を分けない
+        const regex = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF]+|[\uFF65-\uFF9F]+|[a-zA-Z0-9]+|[^\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\sa-zA-Z0-9]+/g;
         const words = tl_text.match(regex) || [];
         console.log(`【分析実行】総単語数: ${words.length}`);
 
