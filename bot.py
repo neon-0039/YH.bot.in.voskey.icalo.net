@@ -123,6 +123,27 @@ def simple_tokenize(text):
     return words
 
 # ================================
+# 📚 テキスト前処理（URLと:word:を除去）
+# ================================
+def preprocess_text(text):
+    """
+    URLと:word:形式を先に除去してから形態素解析する
+    """
+    # 1. URLを除去
+    text = re.sub(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', '', text)
+    
+    # 2. :word: 形式（カスタム絵文字など）を除去
+    text = re.sub(r':[a-zA-Z0-9_]+:', '', text)
+    
+    # 3. HTMLタグを除去
+    text = re.sub(r'<[^>]*>', '', text)
+    
+    # 4. 余分な空白を整理
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    return text
+
+# ================================
 # ☁️ Google Driveクライアント（統一版）
 # ================================
 async def get_drive_auth():
@@ -510,7 +531,7 @@ async def load_brain_from_drive(drive):
         return {}
 
 # ================================
-# 📚 脳学習
+# 📚 脳学習（改良版）
 # ================================
 def learn_brain(brain, words):
     for i in range(len(words) - 1):
@@ -897,6 +918,7 @@ def clean_brain(brain):
     
     print("✅ 脳のクリーニング完了！")
     return brain
+
 # ================================
 # 🧠 マルコフ生成（メイン版：脳を使う）
 # ================================
@@ -1132,40 +1154,61 @@ async def main():
         
         # タイムライン取得
         print("👉 タイムラインを取得します...")
-        tl_raw = await mk.request('notes/timeline', {'limit': 76})
+        tl_raw = await mk.request('notes/timeline', {'limit': 100})
         tl = tl_raw if isinstance(tl_raw, list) else (tl_raw.get('notes') or [])
         
-        tl_text = ""
-        for n in tl:
-            if n.get('text') and n.get('user', {}).get('id') != my_id and 'http' not in n.get('text', ''):
-                cleaned = re.sub(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', '', n.get('text', '')).strip()
-                tl_text += cleaned + "。"
+        all_texts = []
         
-        # Fugashiで形態素解析
-        print(f"【分析実行】形態素解析を開始します...")
-        words = tokenize_with_fugashi(tl_text)
-        print(f"【分析実行】総単語数: {len(words)}")
+        # 形態素解析前の前処理
+        for n in tl:
+            # 自分の投稿、ボット、URL含む投稿をスキップ
+            if (not n.get('text') or 
+                n.get('user', {}).get('id') == my_id or 
+                n.get('user', {}).get('isBot')):
+                continue
+            
+            # 前処理：URL と :word: を除去
+            cleaned_text = preprocess_text(n.get('text', ''))
+            
+            if cleaned_text.strip():
+                all_texts.append(cleaned_text)
+        
+        print(f"【収集完了】有効なテキスト: {len(all_texts)}件")
+        
+        # 形態素解析して単語分割
+        all_words = []
+        for text in all_texts:
+            try:
+                # Fugashiで形態素解析
+                words = tokenize_with_fugashi(text)
+                all_words.extend(words)
+            except Exception as e:
+                print(f"⚠️ 形態素解析エラー: {str(e)}")
+                continue
+        
+        print(f"【分析実行】総単語数: {len(all_words)}")
         
         # 学習
-        brain = learn_brain(brain, words)
-        await save_brain_to_drive(drive, brain)
-        print("✅ 脳の更新とDriveへの保存が完了しました")
-        
-        vocabulary_count = len(brain)
-        connection_count = sum(len(v) for v in brain.values())
-        
-        print(f"✅ 脳の更新が完了しました！")
-        print(f"📊 語彙数(単語の種類): {vocabulary_count}")
-        print(f"⚖️ 総重み数(経験値): {connection_count}")
+        if all_words:
+            brain = learn_brain(brain, all_words)
+            brain = clean_brain(brain)
+            await save_brain_to_drive(drive, brain)
+            
+            vocabulary_count = len(brain)
+            connection_count = sum(len(v) for v in brain.values())
+            
+            print(f"✅ 脳の更新が完了しました！")
+            print(f"📊 語彙数(単語の種類): {vocabulary_count}")
+            print(f"⚖️ 総重み数(経験値): {connection_count}")
         
         # マルコフ連鎖による文章生成
-        output_text = generate_markov(words, brain)
+        output_text = generate_markov(all_words, brain)
         
         retry_count = 0
         while (not output_text or len(output_text) < 4) and retry_count < 5:
             if retry_count > 0:
                 print(f"再生成試行中... ({retry_count}回目)")
-            output_text = generate_markov(words, brain)
+            output_text = generate_markov(all_words, brain)
             retry_count += 1
         
         # 最終投稿
