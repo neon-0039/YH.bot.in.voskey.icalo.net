@@ -1168,13 +1168,20 @@ async function main() {
         const tl_text = tl
             .filter(n => n && n.text && n.user.id !== my_id && !n.text.includes('http'))
             .map(n => n.text.replace(/https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-]+/g, '').trim())
-            .join(" ");
+            .join("。");  // ← 句点で結合
 
-        // 改善版 regex：「謝」と「る」を分けない
-        const regex = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF]+|[\uFF65-\uFF9F]+|[a-zA-Z0-9]+|[^\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\sa-zA-Z0-9]+/g;
-        const words = tl_text.match(regex) || [];
+        // 句点で分割してから、それぞれを単語化
+        const sentences = tl_text.split(/[。！？\n]+/).filter(s => s.trim().length > 0);
+        const words = [];
+
+        sentences.forEach(sentence => {
+            // 各文を細かく分割
+            const regex = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF]+|[\uFF65-\uFF9F]+|[a-zA-Z0-9]+|[、！？…]/g;
+            const sentenceWords = sentence.match(regex) || [];
+            words.push(...sentenceWords);
+        });
+
         console.log(`【分析実行】総単語数: ${words.length}`);
-
         // 学習
         brain = learnBrain(brain, words);
         await saveBrainToDrive(drive, brain);
