@@ -1035,7 +1035,7 @@ function generateMarkov(words, brain) {
         return candidate;
     };
 
-    const mm = (Math.floor(Math.random() *(10 - 6 + 1)) + 6;
+    const mm = Math.floor(Math.random() *(10 - 6 + 1)) + 6;
     let generated = "";
     let current_word = pickNextWord(cleanedWords);
 
@@ -1245,7 +1245,7 @@ async function main() {
 
         // タイムライン取得
         console.log("👉 タイムラインを取得します...");
-        const tlRaw = await requestToMk('notes/timeline', { limit: 72 });
+        const tlRaw = await requestToMk('notes/timeline', { limit: 84 });
         const tl = Array.isArray(tlRaw) ? tlRaw : (tlRaw?.notes || []);
 
         const tl_text = tl
