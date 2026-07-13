@@ -888,6 +888,8 @@ function filterExcludedCharacters(words) {
         (word) => word.includes('\\n'),
         (word) => word.includes('　'),
         (word) => word.includes('<'),
+        (word) => word.includes('(+'),
+        (word) => word.includes('(-'),
         (word) => word.includes('\\'),
         (word) => word.includes('small'),
         (word) => word.includes('color'),
@@ -929,10 +931,10 @@ function cleanBrain(brain) {
         const isInvalidKey =
             key.includes('\n') ||
             key.includes('\\n') ||
+            key.includes('(+') ||
+            key.includes('(-') ||
             key.includes('　') ||
             key.includes('<') ||
-            key.includes('\\') ||
-            key.includes('small') ||
             key.includes('color') ||
             key.includes('\\u') ||
             key.includes(':') ||
@@ -963,6 +965,8 @@ function cleanBrain(brain) {
                     w.includes('\\n') ||
                     w.includes('　') ||
                     w.includes('@') ||
+                    w.includes('(+') ||
+                    w.includes('(-') ||
                     w.includes('<') ||
                     w.includes('\\') ||
                     w.includes('small') ||
