@@ -549,54 +549,6 @@ async function loadBrainFromDrive(drive) {
 }
 
 // ================================
-// 🧹 脳クリーニング
-// ================================
-function cleanBrain(brain) {
-    console.log("既存の脳をスキャンしてゴミ掃除中...");
-
-    const invalidPatterns = [
-        (key) => key.includes('\n'),
-        (key) => key.includes('\\n'),
-        (key) => key.includes('　'),
-        (key) => key.includes('<'),
-        (key) => key.includes('\\'),
-        (key) => key.includes('small'),
-        (key) => key.includes('color'),
-        (key) => key.includes('\\u'),
-        (key) => key.includes(':'),
-        (key) => key.includes('@'),
-        (key) => key.includes('[') || key.includes(']'),
-        (key) => key.includes('$'),
-        (key) => key.includes('死'),
-        (key) => key.includes('blob'),
-        (key) => /[\uD800-\uDBFF]/.test(key),
-        (key) => /[\uDC00-\uDFFF]/.test(key),
-        (key) => key.includes('_'),
-        (key) => /:.*:/.test(key)
-    ];
-
-    const isInvalidKey = (key) => invalidPatterns.some(pattern => pattern(key));
-
-    Object.keys(brain).forEach(key => {
-        let list = brain[key];
-
-        if (Array.isArray(list)) {
-            brain[key] = list.filter(w => {
-                if (typeof w !== 'string') return false;
-                return !invalidPatterns.some(pattern => pattern(w)) && w.trim() !== "";
-            });
-        }
-
-        if (isInvalidKey(key) || !brain[key] || brain[key].length === 0) {
-            delete brain[key];
-        }
-    });
-
-    console.log("脳のクリーニング完了！");
-    return brain;
-}
-
-// ================================
 // 📚 脳学習
 // ================================
 function learnBrain(brain, words) {
