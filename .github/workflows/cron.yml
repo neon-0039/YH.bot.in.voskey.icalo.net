@@ -1,4 +1,4 @@
-name: Misskey Bot JS Cron
+name: Misskey Bot Python Cron
 concurrency:
   group: bot-group
   cancel-in-progress: true
@@ -15,17 +15,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          node-version: '20'
+          python-version: '3.11'
 
-      - name: Install dependencies (Force Update)
-        # @latest を指定し、package-lockを無視して最新を入れ直します
+      - name: Install system dependencies (for MeCab)
         run: |
-          npm install @google/generative-ai@0.21.0 misskey-js@latest axios
-      - name: Install dependencies
-        run: npm install
+          sudo apt-get update
+          sudo apt-get install -y mecab libmecab-dev mecab-ipadic-utf8
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
       - name: Run bot
         env:
           GDRIVE_SERVICE_ACCOUNT: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
@@ -42,10 +46,5 @@ jobs:
             exit 1
           fi
           
-          # 2. JSONファイルを作成
-          cat << 'EOF' > credentials.json
-          ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
-          EOF
-          
-          # 3. 実行
-          node bot.js
+          # 2. 実行
+          python bot.py
