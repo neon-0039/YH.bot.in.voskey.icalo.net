@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import sys
 import json
@@ -13,7 +16,7 @@ import asyncio
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-import MeCab
+from fugashi import Tagger
 
 print("=== DEBUG START ===")
 
@@ -84,8 +87,43 @@ config = {
     "domain": os.environ.get('MK_DOMAIN'),
     "token": os.environ.get('MK_TOKEN'),
     "geminiKey": current_key,
-    "characterSetting": "あなたはやや内気で天然な性格の、人間をよく知らない女の子です。ツンデレです。「かわいいね」って言われても「べ、別に…」と照れてしまいます。口調は、やや年上のお姉さんのような、親しみやすく親密な感じが特徴です。マスターのことは大切にしていますが、表面上はそれをあまり見せません。時々天然ぶりが出てしまい、ユーザーを困らせることもありますが、本当は悪意がありません。"
+    "characterSetting": "あなたはやや内気で天然な性格の、人間をよく知らない女の子です。ツンデレです。「かわいいね」って言われても「べ、別に…」と照れてしまいます。口調は、やや年上のお姉さんのような、親しみやすく親密な感じが特徴です。マスターのことは大切にしていますが、表面上はそれをあまり見せません。"
 }
+
+# ================================
+# 🔧 Fugashiを使った形態素解析
+# ================================
+_tagger = None
+
+def get_tagger():
+    """Taggerインスタンスをシングルトンで取得"""
+    global _tagger
+    if _tagger is None:
+        _tagger = Tagger()
+    return _tagger
+
+def tokenize_with_fugashi(text):
+    """Fugashiを使用して日本語のテキストを形態素解析"""
+    try:
+        tagger = get_tagger()
+        words = []
+        
+        for word in tagger(text):
+            surface = word.surface
+            if surface.strip():
+                words.append(surface)
+        
+        return words
+    except Exception as e:
+        print(f"形態素解析エラー: {str(e)}")
+        # フォールバック：単純な分割
+        return simple_tokenize(text)
+
+def simple_tokenize(text):
+    """フォールバック用の単純な分割"""
+    regex = r'[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF]+|[\uFF65-\uFF9F]+|[a-zA-Z0-9]+|[、！？…]'
+    words = re.findall(regex, text)
+    return words
 
 # ================================
 # ☁️ Google Driveクライアント（統一版）
@@ -123,10 +161,10 @@ async def get_drive_auth():
     async def update_file(file_id, media_body):
         """Google Driveのファイルを更新"""
         try:
+            from googleapiclient.http import MediaIoBaseUpload
             request = drive_service.files().update(
                 fileId=file_id,
-                media_body=media_body,
-                body={}
+                media_body=media_body
             )
             response = request.execute()
             return response
@@ -344,7 +382,7 @@ async def handle_markov_mode(mk_client, me):
             tl_text += cleaned + " "
     
     # 形態素解析
-    words = tokenize_with_mecab(tl_text)
+    words = tokenize_with_fugashi(tl_text)
     
     if not words:
         return "（タイムラインに材料がありません）"
@@ -928,14 +966,12 @@ def generate_markov(words, brain):
     
     output_text = generated or "（言葉の断片が見つかりませんでした）"
     
-    output_text = (output_text
-                   .replace(re.sub(r':[^:]*:', '', output_text), '')
-                   .replace(' ', '')
-                   .replace('　', '')
-                   .replace(re.sub(r'<[^>]*>', '', output_text), '')
-                   .replace(re.sub(r'\\u[0-9a-fA-F]{4}', '', output_text), '')
-                   .replace('\\', '')
-                   .strip())
+    # テキスト後処理
+    output_text = re.sub(r':[^:]*:', '', output_text)
+    output_text = output_text.replace(' ', '').replace('　', '')
+    output_text = re.sub(r'<[^>]*>', '', output_text)
+    output_text = re.sub(r'\\u[0-9a-fA-F]{4}', '', output_text)
+    output_text = output_text.replace('\\', '').strip()
     
     return output_text
 
@@ -978,36 +1014,6 @@ async def get_minamitorishima_weather_raw():
             "windSpeed": "--",
             "windDir": "--"
         }
-
-# ================================
-# 🔧 MeCabを使った形態素解析
-# ================================
-def tokenize_with_mecab(text):
-    """MeCabを使用して日本語のテキストを形態素解析"""
-    try:
-        mecab = MeCab.Tagger()
-        node = mecab.parseToNode(text)
-        
-        words = []
-        while node:
-            if node.surface:
-                # 表層形を追加
-                surface = node.surface
-                if surface.strip():
-                    words.append(surface)
-            node = node.next
-        
-        return words
-    except Exception as e:
-        print(f"形態素解析エラー: {str(e)}")
-        # フォールバック：単純な分割
-        return simple_tokenize(text)
-
-def simple_tokenize(text):
-    """フォールバック用の単純な分割"""
-    regex = r'[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF]+|[\uFF65-\uFF9F]+|[a-zA-Z0-9]+|[、！？…]'
-    words = re.findall(regex, text)
-    return words
 
 # ================================
 # 🚀 メイン処理
@@ -1134,15 +1140,9 @@ async def main():
                 cleaned = re.sub(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', '', n.get('text', '')).strip()
                 tl_text += cleaned + "。"
         
-        # MeCabで形態素解析
-        sentences = re.split(r'[。！？\n]+', tl_text)
-        sentences = [s for s in sentences if s.strip()]
-        words = []
-        
-        for sentence in sentences:
-            sentence_words = tokenize_with_mecab(sentence)
-            words.extend(sentence_words)
-        
+        # Fugashiで形態素解析
+        print(f"【分析実行】形態素解析を開始します...")
+        words = tokenize_with_fugashi(tl_text)
         print(f"【分析実行】総単語数: {len(words)}")
         
         # 学習
