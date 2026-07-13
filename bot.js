@@ -931,10 +931,10 @@ function cleanBrain(brain) {
         const isInvalidKey =
             key.includes('\n') ||
             key.includes('\\n') ||
-            key.includes('(+') ||
-            key.includes('(-') ||
             key.includes('　') ||
             key.includes('<') ||
+            key.includes('\\') ||
+            key.includes('small') ||
             key.includes('color') ||
             key.includes('\\u') ||
             key.includes(':') ||
@@ -943,14 +943,16 @@ function cleanBrain(brain) {
             key.includes(']') ||
             key.includes('$') ||
             key.includes('>') ||
-            key.includes('center')||
             key.includes('Shi') ||
             key.includes('/') ||
             key.includes('​') ||
+            key.includes('center') ||  // ← 追加
+            key.includes('(+') ||  // ← 追加
+            key.includes('(-') ||  // ← 追加
             /[\uD800-\uDBFF]/.test(key) ||
             /[\uDC00-\uDFFF]/.test(key) ||
             /\?{3,}/.test(key) ||
-            /[^\u0000-\u007F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]/g.test(key) ||
+            /[^\u0000-\u0039\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]/g.test(key) ||  // ← 数字のみ許可
             key.includes('_') ||
             /:.*:/.test(key) ||
             /^[:＿]+$/.test(key) ||
@@ -965,8 +967,6 @@ function cleanBrain(brain) {
                     w.includes('\\n') ||
                     w.includes('　') ||
                     w.includes('@') ||
-                    w.includes('(+') ||
-                    w.includes('(-') ||
                     w.includes('<') ||
                     w.includes('\\') ||
                     w.includes('small') ||
@@ -979,11 +979,13 @@ function cleanBrain(brain) {
                     w.includes('$') ||
                     w.includes('>') ||
                     w.includes('Shi') ||
-                    w.includes('center')||
                     w.includes('/') ||
                     w.includes('​') ||
+                    w.includes('center') ||  // ← 追加
+                    w.includes('(+') ||  // ← 追加
+                    w.includes('(-') ||  // ← 追加
                     /\?{3,}/.test(w) ||
-                    /[^\u0000-\u007F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]/g.test(w) ||
+                    /[^\u0000-\u0039\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]/g.test(w) ||  // ← 数字のみ許可
                     /[\uD800-\uDBFF]/.test(w) ||
                     /[\uDC00-\uDFFF]/.test(w)
                 ) return false;
@@ -1250,14 +1252,13 @@ async function main() {
 
         // タイムライン取得
         console.log("👉 タイムラインを取得します...");
-        const tlRaw = await requestToMk('notes/timeline', { limit: 84 });
+        const tlRaw = await requestToMk('notes/timeline', { limit: 76 });
         const tl = Array.isArray(tlRaw) ? tlRaw : (tlRaw?.notes || []);
 
         const tl_text = tl
-            .filter(n => n && n.text && n.user.id !== my_id)
+            .filter(n => n && n.text && n.user.id !== my_id && !n.text.includes('http'))  // ← http を含まないもののみ
             .map(n => n.text.replace(/https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-]+/g, '').trim())
             .join(" ");
-
         // 形態素解析（Regex版 - 高精度）
         const regex = /[\u4E00-\u9FFF]+|[\u3040-\u309F]+|[\u30A0-\u30FF]+|[\uFF65-\uFF9F]+|[a-zA-Z0-9]+|[^\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\sa-zA-Z0-9]+/g;
         const words = tl_text.match(regex) || [];
