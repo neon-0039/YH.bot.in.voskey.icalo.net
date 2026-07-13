@@ -897,7 +897,6 @@ def clean_brain(brain):
     
     print("✅ 脳のクリーニング完了！")
     return brain
-
 # ================================
 # 🧠 マルコフ生成（メイン版：脳を使う）
 # ================================
@@ -932,11 +931,14 @@ def generate_markov(words, brain):
         
         return candidate
     
-    mm = random.randint(6, 10)
+    # 目標文字数をランダムに決定（20~40文字）
+    target_length = random.randint(20, 40)
+    
     generated = ""
     current_word = pick_next_word(words)
     
-    for i in range(mm):
+    # 目標文字数に達するまでループ
+    while len(generated) < target_length:
         if not current_word:
             current_word = pick_next_word(words)
         
@@ -952,12 +954,14 @@ def generate_markov(words, brain):
         
         current_word = found_next or pick_next_word(words)
         
+        # 長い連続ひらがな・カタカナをスキップ
         if re.match(r'^[\u3040-\u309F]{8,}$|^[\u30A0-\u30FF]{8,}$', current_word):
             current_word = pick_next_word(words)
             continue
         
         generated += current_word
         
+        # 終端文字で自然に終了
         if any(current_word.endswith(s) for s in ["。", "！", "？", "w", "…"]):
             break
     
