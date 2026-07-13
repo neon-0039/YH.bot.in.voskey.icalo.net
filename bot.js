@@ -905,6 +905,7 @@ function filterExcludedCharacters(words) {
         (word) => /[\uD800-\uDBFF]/.test(word),
         (word) => /[\uDC00-\uDFFF]/.test(word),
         (word) => word.includes('_'),
+        (word) => word.includes('center'),
         (word) => /:.*:/.test(word),
         (word) => /^[:＿]+$/.test(word),
         (word) => word.match(/emoji|code|image|html/i),
@@ -940,17 +941,18 @@ function cleanBrain(brain) {
             key.includes(']') ||
             key.includes('$') ||
             key.includes('>') ||
+            key.includes('center')||
             key.includes('Shi') ||
             key.includes('/') ||
-            key.includes('​') ||  // ゼロ幅スペース
-            key.includes('‼️') || // 不可視文字・絵文字コード
-            key.includes('blob')||
+            key.includes('​') ||
             /[\uD800-\uDBFF]/.test(key) ||
             /[\uDC00-\uDFFF]/.test(key) ||
+            /\?{3,}/.test(key) ||
+            /[^\u0000-\u007F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]/g.test(key) ||
             key.includes('_') ||
             /:.*:/.test(key) ||
-            /^[:＿]+$/.test(key) ||  // : や _ のみの行
-            key.match(/emoji|code|image|html/i);  // emoji や code 関連キーワード
+            /^[:＿]+$/.test(key) ||
+            key.match(/emoji|code|image|html/i);
 
         let list = brain[key];
 
@@ -973,14 +975,13 @@ function cleanBrain(brain) {
                     w.includes('$') ||
                     w.includes('>') ||
                     w.includes('Shi') ||
+                    w.includes('center')||
                     w.includes('/') ||
-                    w.includes('​') ||  // ゼロ幅スペース
-                    w.includes('blob')||
-                    w.includes('‼️') ||
+                    w.includes('​') ||
+                    /\?{3,}/.test(w) ||
+                    /[^\u0000-\u007F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]/g.test(w) ||
                     /[\uD800-\uDBFF]/.test(w) ||
-                    /[\uDC00-\uDFFF]/.test(w) ||
-                    /^[:＿]+$/.test(w) ||
-                    w.match(/emoji|code|image|html/i)
+                    /[\uDC00-\uDFFF]/.test(w)
                 ) return false;
                 return w.trim() !== "";
             });
