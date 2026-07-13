@@ -850,7 +850,6 @@ function cleanBrain(brain) {
             key.includes('small') ||
             key.includes('color') ||
             key.includes('\\u') ||
-            key.includes(':') ||
             key.includes('@') ||
             key.includes('[') ||
             key.includes(']') ||
@@ -865,9 +864,10 @@ function cleanBrain(brain) {
             /[\uD800-\uDBFF]/.test(key) ||
             /[\uDC00-\uDFFF]/.test(key) ||
             /\?{3,}/.test(key) ||
+            /^:[a-zA-Z0-9_]+:$/.test(key) ||  // ← 追加：カスタム絵文字 :name: 形式
+            /:[a-zA-Z0-9_]+:/.test(key) ||    // ← 追加：カスタム絵文字を含む
             /[^\u0000-\u0039\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]/g.test(key) ||
             key.includes('_') ||
-            /:.*:/.test(key) ||
             /^[:＿]+$/.test(key) ||
             key.match(/emoji|code|image|html/i);
 
@@ -885,8 +885,6 @@ function cleanBrain(brain) {
                     w.includes('small') ||
                     w.includes('color') ||
                     w.includes('\\u') ||
-                    w.includes(':') ||
-                    w.includes('_') ||
                     w.includes('[') ||
                     w.includes(']') ||
                     w.includes('$') ||
@@ -897,6 +895,8 @@ function cleanBrain(brain) {
                     w.includes('center') ||
                     w.includes('(+') ||
                     w.includes('(-') ||
+                    /^:[a-zA-Z0-9_]+:$/.test(w) ||  // ← 追加：カスタム絵文字
+                    /:[a-zA-Z0-9_]+:/.test(w) ||    // ← 追加：カスタム絵文字を含む
                     /\?{3,}/.test(w) ||
                     /[^\u0000-\u0039\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]/g.test(w) ||
                     /[\uD800-\uDBFF]/.test(w) ||
@@ -914,7 +914,6 @@ function cleanBrain(brain) {
     console.log("✅ 脳のクリーニング完了！");
     return brain;
 }
-
 // ================================
 // 🧠 マルコフ生成（メイン版：脳を使う）
 // ================================
