@@ -863,6 +863,8 @@ def clean_brain(brain):
             '\\n' in key or
             '　' in key or
             '<' in key or
+            'x=' in key or
+            'y=' in key or
             '\\' in key or
             'small' in key or
             'color' in key or
@@ -905,6 +907,8 @@ def clean_brain(brain):
                 '\\u' not in w and
                 '[' not in w and
                 ']' not in w and
+                'y=' not in w and
+                'x=' not in w and
                 '$' not in w and
                 '>' not in w and
                 'Shi' not in w and
