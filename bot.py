@@ -165,8 +165,8 @@ async def get_drive_auth():
     
     drive_service = build('drive', 'v3', credentials=credentials)
     
-    async def get_file(file_id):
-        """Google Driveからファイルを取得"""
+    def get_file_sync(file_id):
+        """Google Driveからファイルを取得（同期版）"""
         try:
             print(f"FILE ID: {file_id}")
             request = drive_service.files().get_media(fileId=file_id)
@@ -176,8 +176,8 @@ async def get_drive_auth():
             print(f"Drive GET failed: {error}")
             raise error
     
-    async def update_file(file_id, media_body):
-        """Google Driveのファイルを更新"""
+    def update_file_sync(file_id, media_body):
+        """Google Driveのファイルを更新（同期版）"""
         try:
             from googleapiclient.http import MediaIoBaseUpload
             request = drive_service.files().update(
@@ -193,8 +193,8 @@ async def get_drive_auth():
     return {
         "auth": credentials,
         "files": {
-            "get": get_file,
-            "update": update_file
+            "get": get_file_sync,
+            "update": update_file_sync
         }
     }
 
@@ -491,7 +491,7 @@ async def load_brain_from_drive(drive):
         if not file_id:
             raise Exception("環境変数 GDRIVE_FILE_ID が読み込めていません！")
         
-        raw_data = await drive['files']['get'](file_id)
+        raw_data = drive['files']['get'](file_id)
         
         print(f"RESPONSE DATA TYPE: {type(raw_data)}")
         
@@ -549,28 +549,37 @@ def learn_brain(brain, words):
     return brain
 
 # ================================
-# 💾 脳をGoogle Driveに保存
+# 💾 脳をGoogle Driveに保存（改良版）
 # ================================
 async def save_brain_to_drive(drive, brain):
     file_id = os.environ.get('GDRIVE_FILE_ID', '').strip() if os.environ.get('GDRIVE_FILE_ID') else None
     if not file_id:
+        print("⚠️ GDRIVE_FILE_ID が設定されていません。保存をスキップします。")
         return False
     
     try:
         payload = json.dumps(brain, ensure_ascii=False, indent=2)
+        payload_size = len(payload.encode('utf-8'))
+        
+        print(f"📊 脳データサイズ: {payload_size / 1024:.2f} KB")
         
         # Google Drive APIを使用してファイルを更新
         from io import BytesIO
         from googleapiclient.http import MediaIoBaseUpload
         
-        media = MediaIoBaseUpload(BytesIO(payload.encode('utf-8')), mimetype='application/json')
-        await drive['files']['update'](file_id, media)
+        media = MediaIoBaseUpload(BytesIO(payload.encode('utf-8')), mimetype='application/json', resumable=False)
         
-        print("✅ Google Drive保存成功 (絶縁完了)")
+        print(f"📝 Google Drive への保存を開始します... (File ID: {file_id})")
+        result = drive['files']['update'](file_id, media)
+        
+        print(f"✅ Google Drive保存成功！")
+        print(f"   - 語彙数: {len(brain)}")
+        print(f"   - ペイロードサイズ: {payload_size / 1024:.2f} KB")
         return True
     
     except Exception as e:
-        print(f"❌ 例外発生: {str(e)}")
+        print(f"❌ Google Drive保存失敗: {str(e)}")
+        print(f"   エラーの詳細: {type(e).__name__}")
         return False
 
 # ================================
@@ -740,7 +749,7 @@ locations_group_b = {
         {"name": "石垣市", "lat": 24.34, "lon": 124.16},
         {"name": "奄美市", "lat": 28.37, "lon": 129.48},
         {"name": "南鳥島", "lat": 24.28, "lon": 153.98},
-        {"name": "小笠原諸島", "lat": 27.09, "lon": 142.19}
+        {"name": "��笠原諸島", "lat": 27.09, "lon": 142.19}
     ],
     "南極": [
         {"name": "昭和基地", "lat": -69.00, "lon": 39.58}
@@ -1152,6 +1161,8 @@ async def main():
         brain = await load_brain_from_drive(drive)
         brain = clean_brain(brain)
         
+        print(f"📊 読み込んだ脳のサイズ: 語彙数 {len(brain)}")
+        
         # タイムライン取得
         print("👉 タイムラインを取得します...")
         tl_raw = await mk.request('notes/timeline', {'limit': 100})
@@ -1190,16 +1201,30 @@ async def main():
         
         # 学習
         if all_words:
+            print(f"📖 脳を更新中... （{len(all_words)} 単語を追加）")
             brain = learn_brain(brain, all_words)
+            
+            pre_clean_size = len(brain)
             brain = clean_brain(brain)
-            await save_brain_to_drive(drive, brain)
+            post_clean_size = len(brain)
             
-            vocabulary_count = len(brain)
-            connection_count = sum(len(v) for v in brain.values())
+            print(f"🧹 クリーニング: {pre_clean_size} → {post_clean_size} 語彙")
             
-            print(f"✅ 脳の更新が完了しました！")
-            print(f"📊 語彙数(単語の種類): {vocabulary_count}")
-            print(f"⚖️ 総重み数(経験値): {connection_count}")
+            # ✅ ここで await を使用して保存完了を待つ
+            print(f"💾 Google Drive に脳を保存中...")
+            save_success = await save_brain_to_drive(drive, brain)
+            
+            if save_success:
+                vocabulary_count = len(brain)
+                connection_count = sum(len(v) for v in brain.values())
+                
+                print(f"✅ 脳の更新が完了しました！")
+                print(f"📊 語彙数(単語の種類): {vocabulary_count}")
+                print(f"⚖️ 総重み数(経験値): {connection_count}")
+            else:
+                print(f"⚠️ 脳の保存に失敗しましたが、生成は続行します")
+        else:
+            print("⚠️ 形態素解析結果が空です")
         
         # マルコフ連鎖による文章生成
         output_text = generate_markov(all_words, brain)
