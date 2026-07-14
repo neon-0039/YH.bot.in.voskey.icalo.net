@@ -495,8 +495,11 @@ async def load_brain_from_drive(drive):
         
         print(f"RESPONSE DATA TYPE: {type(raw_data)}")
         
-        if isinstance(raw_data, dict):
-            raw_data = json.dumps(raw_data)
+        # ✅ bytes型の場合は最初にデコード
+        if isinstance(raw_data, bytes):
+            raw_data = raw_data.decode('utf-8')
+        elif isinstance(raw_data, dict):
+            raw_data = json.dumps(raw_data, ensure_ascii=False)
         else:
             raw_data = str(raw_data)
         
@@ -517,7 +520,7 @@ async def load_brain_from_drive(drive):
         
         # JSON復元
         try:
-            brain = json.loads(raw_data.strip()) if isinstance(raw_data, str) else raw_data
+            brain = json.loads(raw_data.strip())
             word_count = len(brain)
             print(f"✅ 現在の脳の蓄積語数: {word_count}語")
             return brain
@@ -529,7 +532,7 @@ async def load_brain_from_drive(drive):
     except Exception as e:
         print(f"❌ Google Drive接続致命的エラー: {str(e)}")
         return {}
-
+        
 # ================================
 # 📚 脳学習（改良版）
 # ================================
