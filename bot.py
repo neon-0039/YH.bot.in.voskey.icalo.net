@@ -127,7 +127,7 @@ def simple_tokenize(text):
 # ================================
 def preprocess_text(text):
     """
-    URLと:word:形式を先に除去してから形態素解析する
+    URLと:word:形式、[ ]を先に除去してから形態素解析する
     """
     # 1. URLを除去
     text = re.sub(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', '', text)
@@ -135,14 +135,17 @@ def preprocess_text(text):
     # 2. :word: 形式（カスタム絵文字など）を除去
     text = re.sub(r':[a-zA-Z0-9_]+:', '', text)
     
-    # 3. HTMLタグを除去
+    # ✅ 3. [ ]で囲まれた記法を除去（位置情報、Ruby文字、MFM記法など）
+    text = re.sub(r'\[.*?\]', '', text)
+    
+    # 4. HTMLタグを除去
     text = re.sub(r'<[^>]*>', '', text)
     
-    # 4. 余分な空白を整理
+    # 5. 余分な空白を整理
     text = re.sub(r'\s+', ' ', text).strip()
     
     return text
-
+    
 # ================================
 # ☁️ Google Driveクライアント（統一版）
 # ================================
