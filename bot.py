@@ -879,6 +879,7 @@ def clean_brain(brain):
             '>' in key or
             'Shi' in key or
             '/' in key or
+            'ほのか'in key or
             '​' in key or
             'center' in key or
             '(+' in key or
@@ -903,6 +904,7 @@ def clean_brain(brain):
                 '\\n' not in w and
                 '　' not in w and
                 '@' not in w and
+                'ほのか'not in w and
                 '<' not in w and
                 '\\' not in w and
                 'small' not in w and
