@@ -462,7 +462,7 @@ async def handle_omikuji_mode():
 【おみくじモード】  
 結果は【{luck_result}】です。 
 - 運勢の結果に基づいた、あなたらしい「今日のアドバイス」や「ラッキーアイテム」を1つ含めてください。 
-- 結果(小吉など)を必ずしっかりと伝えてください。 
+- 結果(小吉など)を最初に必ずしっかりと伝えてください。 
 - 「おみくじの結果は〜」のような形式張った説明は不要。 
 - 100文字以内で、親しみやすく、かつキャラクターの口調を崩さずに回答してください。 
 - 相手の名前を呼んでも構いません。ただし、メンションと「@」使用禁止。純粋なテキストのみを出力し、音声演出用の記号は含めないでください"""
@@ -968,7 +968,7 @@ def generate_markov(words, brain):
             candidate = random.choice(word_list)
         
         attempts = 0
-        while re.search(r'マルコフ|おみくじ|タイムライン|@|#|死', candidate) and attempts < 5:
+        while re.search(r'マルコフ|おみくじ|タイムライン|@|#|死|ほのか', candidate) and attempts < 5:
             candidate = random.choice(words)
             attempts += 1
         
