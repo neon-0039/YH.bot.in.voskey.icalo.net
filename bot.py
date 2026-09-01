@@ -908,6 +908,7 @@ def clean_brain(brain):
             'center' in key or
             '(+' in key or
             '(-' in key or
+            '#' in key or
             bool(re.search(r'[\uD800-\uDBFF]', key)) or
             bool(re.search(r'[\uDC00-\uDFFF]', key)) or
             bool(re.search(r'\?{3,}', key)) or
@@ -946,6 +947,7 @@ def clean_brain(brain):
                 'center' not in w and
                 '(+' not in w and
                 '(-' not in w and
+                '#' not in w and
                 not bool(re.match(r'^:[a-zA-Z0-9_]+:$', w)) and
                 not bool(re.search(r':[a-zA-Z0-9_]+:', w)) and
                 not bool(re.search(r'\?{3,}', w)) and
