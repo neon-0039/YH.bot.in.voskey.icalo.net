@@ -58,6 +58,20 @@ def sleep(ms):
 
 particles = ["が", "の", "を", "と", "に", "から", "は", "も", "で"]
 
+# ----------------
+# NGパターンとユーティリティ（今回追加）
+NG_PATTERN = re.compile(r'マルコフ|おみくじ|タイムライン|@|#|死|ほのか')
+
+def is_symbol(s: str) -> bool:
+    """記号判定（元実装と同等の判定）"""
+    return not bool(re.search(r'[a-zA-Z0-9\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F]', s))
+
+def contains_http_scheme(text: str) -> bool:
+    """明示的に http:// または https:// が含まれているか"""
+    if not text:
+        return False
+    return 'http://' in text or 'https://' in text
+
 # ================================
 # 🔑 APIキー管理（時間切替）
 # ================================
@@ -397,18 +411,31 @@ async def handle_markov_mode(mk_client, me):
     tl = await mk_client.request('notes/timeline', {'limit': 72})
     
     tl_text = ""
+    # 変更: 投稿ごとに http(s) を含むかチェックし、含む場合は投稿を丸ごと破棄する
     for n in tl:
-        if n.get('text') and n.get('user', {}).get('id') != me.get('id') and 'http' not in n.get('text', ''):
-            cleaned = re.sub(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', '', n.get('text', '')).strip()
+        text = n.get('text') or ""
+        if not text:
+            continue
+        if n.get('user', {}).get('id') == me.get('id') or n.get('user', {}).get('isBot'):
+            continue
+        if contains_http_scheme(text):
+            # 投稿に http(s) が含まれているため破棄（無視）
+            continue
+        # URL除去／前処理は tokenize 前に行う
+        cleaned = preprocess_text(text).strip()
+        if cleaned:
             tl_text += cleaned + " "
     
     # 形態素解析
     words = tokenize_with_fugashi(tl_text)
     
-    if not words:
+    # 追加: NG単語を含む単語は仮辞書に含めない（シンプル版でも除外）
+    filtered_words = [w for w in words if w and not NG_PATTERN.search(w) and not is_symbol(w)]
+    
+    if not filtered_words:
         return "（タイムラインに材料がありません）"
     
-    return generate_simple_markov(words)
+    return generate_simple_markov(filtered_words)
 
 # ================================
 # 🧠 シンプルマルコフ生成（脳を使わない）
@@ -417,11 +444,8 @@ def generate_simple_markov(words):
     if not words:
         return "（材料がありません）"
     
-    def is_symbol(s):
-        return not re.search(r'[a-zA-Z0-9\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F]', s)
-    
-    # 不要な要素をフィルタ
-    cleaned_words = [w for w in words if w.strip() and not is_symbol(w)]
+    # 不要な要素をフィルタ（追加：NGパターン除外）
+    cleaned_words = [w for w in words if w.strip() and not is_symbol(w) and not NG_PATTERN.search(w)]
     
     if not cleaned_words:
         return "（材料がありません）"
@@ -543,12 +567,15 @@ async def load_brain_from_drive(drive):
         return {}
         
 # ================================
-# 📚 脳学習（改良版：2-gram 対応）
+# 📚 脳学習（改良版：2-gram 対応、NG除外）
 # ================================
 def learn_brain(brain, words):
     """
     brain のキーは 'w1\\x1fw2' という文字列（内部区切りは ASCII unit separator）で 2-gram を表す。
     例: key = f"{w1}\\x1f{w2}" -> 候補リストに w3 を追加
+
+    変更点:
+    - NG_PATTERN に一致する単語や URL を含む投稿から抽出された単語は学習に登録しない。
     """
     if not words or len(words) < 3:
         return brain
@@ -557,6 +584,17 @@ def learn_brain(brain, words):
         w1 = words[i]
         w2 = words[i + 1]
         w3 = words[i + 2]
+
+        # NGチェック：いずれかが禁止パターンに一致したら登録しない
+        if NG_PATTERN.search(w1) or NG_PATTERN.search(w2) or NG_PATTERN.search(w3):
+            continue
+        # URLスキームを含む単語は除外（念のため）
+        if contains_http_scheme(w1) or contains_http_scheme(w2) or contains_http_scheme(w3):
+            continue
+        # 記号のみのトークンも除外
+        if is_symbol(w1) or is_symbol(w2) or is_symbol(w3):
+            continue
+        
         key = f"{w1}\x1f{w2}"
         
         if key not in brain:
