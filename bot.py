@@ -437,7 +437,7 @@ def generate_simple_markov(words):
         if any(cleaned_words[random_idx].endswith(s) for s in ["。", "！", "？"]):
             break
     
-    return generated or "（言葉が見つかりません）"
+    return generated or "（言葉が見つかりませんません）"
 
 # ================================
 # 🎴 おみくじモード処理
@@ -523,10 +523,16 @@ async def load_brain_from_drive(drive):
         
         # JSON復元
         try:
-            brain = json.loads(raw_data.strip())
-            word_count = len(brain)
-            print(f"✅ 現在の脳の蓄積語数: {word_count}語")
-            return brain
+            parsed = json.loads(raw_data.strip())
+            # 新形式（version:2）かどうかを判定
+            if isinstance(parsed, dict) and parsed.get("version") == 2 and isinstance(parsed.get("data"), dict):
+                brain_data = parsed.get("data", {})
+                print(f"✅ 2-gram 脳データ (version 2) を読み込みました。語彙数: {len(brain_data)}")
+                return brain_data
+            else:
+                # 旧形式（おそらく 1-gram）を検出した場合は、誤って使用しないため空の2-gramとして扱う
+                print("⚠️ 旧形式の脳データが見つかりました。安全のため新しい2-gram脳を空で作成します。")
+                return {}
         except json.JSONDecodeError as p_err:
             print(f"🚨 JSONパースエラー: {str(p_err)}")
             print(f"受信データ冒頭: {raw_data[:100]}")
@@ -537,25 +543,34 @@ async def load_brain_from_drive(drive):
         return {}
         
 # ================================
-# 📚 脳学習（改良版）
+# 📚 脳学習（改良版：2-gram 対応）
 # ================================
 def learn_brain(brain, words):
-    for i in range(len(words) - 1):
+    """
+    brain のキーは 'w1\\x1fw2' という文字列（内部区切りは ASCII unit separator）で 2-gram を表す。
+    例: key = f"{w1}\\x1f{w2}" -> 候補リストに w3 を追加
+    """
+    if not words or len(words) < 3:
+        return brain
+    
+    for i in range(len(words) - 2):
         w1 = words[i]
         w2 = words[i + 1]
+        w3 = words[i + 2]
+        key = f"{w1}\x1f{w2}"
         
-        if w1 not in brain:
-            brain[w1] = []
+        if key not in brain:
+            brain[key] = []
         
-        brain[w1].append(w2)
+        brain[key].append(w3)
         
-        if len(brain[w1]) > 10000:
-            brain[w1].pop(0)
+        if len(brain[key]) > 10000:
+            brain[key].pop(0)
     
     return brain
 
 # ================================
-# 💾 脳をGoogle Driveに保存（改良版）
+# 💾 脳をGoogle Driveに保存（改良版：version 付与）
 # ================================
 async def save_brain_to_drive(drive, brain):
     file_id = os.environ.get('GDRIVE_FILE_ID', '').strip() if os.environ.get('GDRIVE_FILE_ID') else None
@@ -564,7 +579,12 @@ async def save_brain_to_drive(drive, brain):
         return False
     
     try:
-        payload = json.dumps(brain, ensure_ascii=False, indent=2)
+        # 新形式としてラップして保存する
+        payload_obj = {
+            "version": 2,
+            "data": brain
+        }
+        payload = json.dumps(payload_obj, ensure_ascii=False, indent=2)
         payload_size = len(payload.encode('utf-8'))
         
         print(f"📊 脳データサイズ: {payload_size / 1024:.2f} KB")
@@ -945,24 +965,30 @@ def clean_brain(brain):
     return brain
 
 # ================================
-# 🧠 マルコフ生成（メイン版：脳を使う）
+# 🧠 マルコフ生成（メイン版：2-gram 対応）
 # ================================
 def generate_markov(words, brain):
-    if not words:
+    """
+    2-gram 実装:
+    - markov_dict: key = 'w1\\x1fw2' -> [w3, ...]
+    - brain: 2-gram の同一フォーマットで期待される（load/saveでバージョン管理）
+    """
+    if not words or len(words) < 3:
         return "（材料がありません）"
     
     def is_symbol(s):
         return not re.search(r'[a-zA-Z0-9\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F]', s)
     
+    # markov_dict を 2-gram で構築
     markov_dict = {}
-    for i in range(len(words) - 1):
-        w1 = words[i]
-        w2 = words[i + 1]
-        if w1 not in markov_dict:
-            markov_dict[w1] = []
-        markov_dict[w1].append(w2)
+    for i in range(len(words) - 2):
+        k = f"{words[i]}\x1f{words[i+1]}"
+        v = words[i+2]
+        if k not in markov_dict:
+            markov_dict[k] = []
+        markov_dict[k].append(v)
     
-    def pick_next_word(word_list):
+    def pick_next_word_from_list(word_list):
         if not word_list:
             return ""
         
@@ -972,8 +998,9 @@ def generate_markov(words, brain):
             candidate = random.choice(word_list)
         
         attempts = 0
+        # NGワードや不適切単語を避ける試行
         while re.search(r'マルコフ|おみくじ|タイムライン|@|#|死|ほのか', candidate) and attempts < 5:
-            candidate = random.choice(words)
+            candidate = random.choice(word_list)
             attempts += 1
         
         return candidate
@@ -981,40 +1008,57 @@ def generate_markov(words, brain):
     # 目標文字数をランダムに決定（20~40文字）
     target_length = random.randint(20, 40)
     
-    generated = ""
-    current_word = pick_next_word(words)
+    # 開始ペアをランダムに選択
+    start_idx = random.randint(0, len(words) - 2)
+    w_prev = words[start_idx]
+    w_curr = words[start_idx + 1]
+    
+    generated = w_prev + w_curr  # 直前2単語を先に入れる
     
     # 目標文字数に達するまでループ
     while len(generated) < target_length:
-        if not current_word:
-            current_word = pick_next_word(words)
-        
+        key = f"{w_prev}\x1f{w_curr}"
         found_next = ""
         use_brain = random.random() < 0.7
         
-        if use_brain and current_word in particles and current_word in brain:
-            candidates = brain[current_word]
-            found_next = random.choice(candidates)
+        # brainは「直前2語のキー」で保存されている前提。意図を維持：現在のcurrent_word(=w_curr)が助詞などのときにbrainを優先
+        if use_brain and (w_curr in particles) and (key in brain):
+            candidates = brain.get(key, [])
+            if candidates:
+                found_next = random.choice(candidates)
         
-        if not found_next and current_word in markov_dict:
-            found_next = pick_next_word(markov_dict[current_word])
+        # brainが使えないまたは候補が無い場合は markov_dict を参照
+        if not found_next and key in markov_dict:
+            found_next = pick_next_word_from_list(markov_dict[key])
         
-        current_word = found_next or pick_next_word(words)
+        # どちらもダメなら単語リスト全体から拾う（フォールバック）
+        if not found_next:
+            found_next = pick_next_word_from_list(words)
         
         # 長い連続ひらがな・カタカナをスキップ
-        if re.match(r'^[\u3040-\u309F]{8,}$|^[\u30A0-\u30FF]{8,}$', current_word):
-            current_word = pick_next_word(words)
-            continue
+        if re.match(r'^[\u3040-\u309F]{8,}$|^[\u30A0-\u30FF]{8,}$', found_next):
+            # 別候補を試す
+            attempts = 0
+            while attempts < 3 and re.match(r'^[\u3040-\u309F]{8,}$|^[\u30A0-\u30FF]{8,}$', found_next):
+                found_next = pick_next_word_from_list(words)
+                attempts += 1
+            if re.match(r'^[\u3040-\u309F]{8,}$|^[\u30A0-\u30FF]{8,}$', found_next):
+                # 諦めて次へ
+                pass
         
-        generated += current_word
+        # 追加
+        generated += found_next
+        
+        # 次の状態にシフト
+        w_prev, w_curr = w_curr, found_next
         
         # 終端文字で自然に終了
-        if any(current_word.endswith(s) for s in ["。", "！", "？", "w", "…"]):
+        if any(found_next.endswith(s) for s in ["。", "！", "？", "w", "…"]):
             break
     
     output_text = generated or "（言葉の断片が見つかりませんでした）"
     
-    # テキスト後処理
+    # テキスト後処理（既存の処理を維持）
     output_text = re.sub(r':[^:]*:', '', output_text)
     output_text = output_text.replace(' ', '').replace('　', '')
     output_text = re.sub(r'<[^>]*>', '', output_text)
