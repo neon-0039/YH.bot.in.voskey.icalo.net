@@ -1,3 +1,4 @@
+# === bot.py (全文) ===
 import os
 import sys
 import json
@@ -59,7 +60,7 @@ def sleep(ms):
 particles = ["が", "の", "を", "と", "に", "から", "は", "も", "で"]
 
 # ----------------
-# NGパターンとユーティリティ（今回追加）
+# NGパターンとユーティリティ
 NG_PATTERN = re.compile(r'マルコフ|おみくじ|タイムライン|@|#|死|ほのか')
 
 def is_symbol(s: str) -> bool:
@@ -71,6 +72,22 @@ def contains_http_scheme(text: str) -> bool:
     if not text:
         return False
     return 'http://' in text or 'https://' in text
+
+def contains_forbidden_in_post(text: str) -> bool:
+    """
+    投稿全体に対する禁止判定。
+    - http:// または https:// を含む
+    - '@' または '#' を含む
+    を丸ごと破棄する。
+    """
+    if not text:
+        return False
+    if contains_http_scheme(text):
+        return True
+    # 明示的に @ または # が含まれていたら破棄
+    if '@' in text or '#' in text:
+        return True
+    return False
 
 # ================================
 # 🔑 APIキー管理（時間切替）
@@ -411,17 +428,17 @@ async def handle_markov_mode(mk_client, me):
     tl = await mk_client.request('notes/timeline', {'limit': 72})
     
     tl_text = ""
-    # 変更: 投稿ごとに http(s) を含むかチェックし、含む場合は投稿を丸ごと破棄する
+    # 変更: 投稿ごとに http(s) または @/# を含むかチェックし、含む場合は投稿を丸ごと破棄する
     for n in tl:
         text = n.get('text') or ""
         if not text:
             continue
         if n.get('user', {}).get('id') == me.get('id') or n.get('user', {}).get('isBot'):
             continue
-        if contains_http_scheme(text):
-            # 投稿に http(s) が含まれているため破棄（無視）
+        if contains_forbidden_in_post(text):
+            # 投稿に http(s) または @/# が含まれているため破棄（無視）
             continue
-        # URL除去／前処理は tokenize 前に行う
+        # 前処理（URLなどの残滓を消すが投稿自体は上で判断済み）
         cleaned = preprocess_text(text).strip()
         if cleaned:
             tl_text += cleaned + " "
@@ -922,7 +939,7 @@ def clean_brain(brain):
     
     keys_to_delete = []
     
-    for key in brain:
+    for key in list(brain.keys()):
         is_invalid_key = (
             '\n' in key or
             '\\n' in key or
@@ -946,7 +963,6 @@ def clean_brain(brain):
             'center' in key or
             '(+' in key or
             '(-' in key or
-            '#' in key or
             bool(re.search(r'[\uD800-\uDBFF]', key)) or
             bool(re.search(r'[\uDC00-\uDFFF]', key)) or
             bool(re.search(r'\?{3,}', key)) or
@@ -958,7 +974,7 @@ def clean_brain(brain):
             bool(re.search(r'emoji|code|image|html', key, re.IGNORECASE))
         )
         
-        word_list = brain[key]
+        word_list = brain.get(key, [])
         
         if isinstance(word_list, list):
             brain[key] = [
@@ -985,17 +1001,16 @@ def clean_brain(brain):
                 'center' not in w and
                 '(+' not in w and
                 '(-' not in w and
-                '#' not in w and
                 not bool(re.match(r'^:[a-zA-Z0-9_]+:$', w)) and
                 not bool(re.search(r':[a-zA-Z0-9_]+:', w)) and
                 not bool(re.search(r'\?{3,}', w)) and
                 not bool(re.search(r'[^\u0000-\u0039\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F\s、。！？w…ー・]', w)) and
                 not bool(re.search(r'[\uD800-\uDBFF]', w)) and
-                not bool(re.search(r'[\uDC00-\uDFFF]', w)) and
+                not bool(re.search(r'[\uDC00-\uDCFF]', w)) and
                 w.strip() != ""
             ]
         
-        if is_invalid_key or not brain[key] or len(brain[key]) == 0:
+        if is_invalid_key or not brain.get(key) or len(brain.get(key, [])) == 0:
             keys_to_delete.append(key)
     
     for key in keys_to_delete:
@@ -1016,18 +1031,6 @@ def generate_markov(words, brain):
     if not words or len(words) < 3:
         return "（材料がありません）"
     
-    def is_symbol(s):
-        return not re.search(r'[a-zA-Z0-9\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uFF65-\uFF9F]', s)
-    
-    # markov_dict を 2-gram で構築
-    markov_dict = {}
-    for i in range(len(words) - 2):
-        k = f"{words[i]}\x1f{words[i+1]}"
-        v = words[i+2]
-        if k not in markov_dict:
-            markov_dict[k] = []
-        markov_dict[k].append(v)
-    
     def pick_next_word_from_list(word_list):
         if not word_list:
             return ""
@@ -1039,21 +1042,42 @@ def generate_markov(words, brain):
         
         attempts = 0
         # NGワードや不適切単語を避ける試行
-        while re.search(r'マルコフ|おみくじ|タイムライン|@|#|死|ほのか', candidate) and attempts < 5:
+        while NG_PATTERN.search(candidate) and attempts < 5:
             candidate = random.choice(word_list)
             attempts += 1
         
         return candidate
     
+    # markov_dict を 2-gram で構築（NGやURL・記号を含むトリプレットは除外）
+    markov_dict = {}
+    for i in range(len(words) - 2):
+        a, b, c = words[i], words[i+1], words[i+2]
+        # 投稿レベルなら既にフィルタ済みだが念のためトークン単位でもチェック
+        if NG_PATTERN.search(a) or NG_PATTERN.search(b) or NG_PATTERN.search(c):
+            continue
+        if contains_http_scheme(a) or contains_http_scheme(b) or contains_http_scheme(c):
+            continue
+        if is_symbol(a) or is_symbol(b) or is_symbol(c):
+            continue
+        k = f"{a}\x1f{b}"
+        if k not in markov_dict:
+            markov_dict[k] = []
+        markov_dict[k].append(c)
+    
     # 目標文字数をランダムに決定（20~40文字）
     target_length = random.randint(20, 40)
     
-    # 開始ペアをランダムに選択
-    start_idx = random.randint(0, len(words) - 2)
-    w_prev = words[start_idx]
-    w_curr = words[start_idx + 1]
-    
-    generated = w_prev + w_curr  # 直前2単語を先に入れる
+    # 開始ペアをランダムに選択（候補があるキーから選んだ方が良い）
+    if markov_dict:
+        start_key = random.choice(list(markov_dict.keys()))
+        w_prev, w_curr = start_key.split('\x1f')
+        generated = w_prev + w_curr
+    else:
+        # フォールバック：words からランダムスタート（安全に）
+        start_idx = random.randint(0, len(words) - 2)
+        w_prev = words[start_idx]
+        w_curr = words[start_idx + 1]
+        generated = w_prev + w_curr
     
     # 目標文字数に達するまでループ
     while len(generated) < target_length:
@@ -1082,9 +1106,7 @@ def generate_markov(words, brain):
             while attempts < 3 and re.match(r'^[\u3040-\u309F]{8,}$|^[\u30A0-\u30FF]{8,}$', found_next):
                 found_next = pick_next_word_from_list(words)
                 attempts += 1
-            if re.match(r'^[\u3040-\u309F]{8,}$|^[\u30A0-\u30FF]{8,}$', found_next):
-                # 諦めて次へ
-                pass
+            # それでもダメなら許容して次へ
         
         # 追加
         generated += found_next
@@ -1272,14 +1294,18 @@ async def main():
         
         # 形態素解析前の前処理
         for n in tl:
-            # 自分の投稿、ボット、URL含む投稿をスキップ
-            if (not n.get('text') or 
+            # 自分の投稿、ボット、URL/@/#含む投稿をスキップ（丸ごと破棄）
+            text = n.get('text') or ""
+            if (not text or 
                 n.get('user', {}).get('id') == my_id or 
                 n.get('user', {}).get('isBot')):
                 continue
+            if contains_forbidden_in_post(text):
+                # 投稿に http(s) または @/# が含まれている場合、投稿を破棄（無視）
+                continue
             
             # 前処理：URL と :word: を除去
-            cleaned_text = preprocess_text(n.get('text', ''))
+            cleaned_text = preprocess_text(text)
             
             if cleaned_text.strip():
                 all_texts.append(cleaned_text)
@@ -1292,7 +1318,9 @@ async def main():
             try:
                 # Fugashiで形態素解析
                 words = tokenize_with_fugashi(text)
-                all_words.extend(words)
+                # 投稿レベルで既にフィルタ済みだが単語単位でNGも除外してcollect
+                filtered = [w for w in words if w and not NG_PATTERN.search(w) and not is_symbol(w)]
+                all_words.extend(filtered)
             except Exception as e:
                 print(f"⚠️ 形態素解析エラー: {str(e)}")
                 continue
@@ -1363,3 +1391,4 @@ async def main():
 # ================================
 if __name__ == "__main__":
     asyncio.run(main())
+# === end of file ===
