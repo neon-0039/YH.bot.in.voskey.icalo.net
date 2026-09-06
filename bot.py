@@ -61,7 +61,7 @@ particles = ["が", "の", "を", "と", "に", "から", "は", "も", "で"]
 
 # ----------------
 # NGパターンとユーティリティ
-NG_PATTERN = re.compile(r'マルコフ|おみくじ|タイムライン|@|#|死|ほのか')
+NG_PATTERN = re.compile(r'マルコフ|おみくじ|タイムライン|@|#|死|ほのか|イラマ')
 
 def is_symbol(s: str) -> bool:
     """記号判定（元実装と同等の判定）"""
@@ -959,6 +959,7 @@ def clean_brain(brain):
             'Shi' in key or
             '/' in key or
             'ほのか'in key or
+            'イラマ'in key or
             '​' in key or
             'center' in key or
             '(+' in key or
@@ -984,6 +985,7 @@ def clean_brain(brain):
                 '　' not in w and
                 '@' not in w and
                 'ほのか'not in w and
+                'イラマ'not in w and
                 '<' not in w and
                 '\\' not in w and
                 'small' not in w and
