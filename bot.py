@@ -318,57 +318,21 @@ async def ask_gemini(prompt):
     return get_random_error()
 
 # ================================
-# 🛡️ DM受信時のスパム/有害ワード検知とブロック処理
+# 🛡️ メンション受信時の公開範囲チェック
 # ================================
-# ⚠️ ここに追加: ブロック・ミュートしたいキーワードを追加してください
-# 形式: 大文字小文字を区別しません
-BLOCK_KEYWORDS = [
-    "個人情報を漏洩",
-    "反日勢力",
-    "集団ストーカー",
-    "〇害",
-    "カルト",
-    "逮捕されろ",
-    # さらに追加する場合は上に同じ形式で続けてください
-]
-
-async def check_and_handle_dm_spam(mk_client, dm_message, sender_id, sender_username):
+async def check_visibility(note):
     """
-    DMの内容をチェックして、ブロック対象キーワードが含まれていたら
-    送り主をブロック・ミュートしてTrue を返す。
-    含まれていなかったらFalseを返す。
+    メンションの公開範囲がパブリック/ホーム/フォロワーのいずれかなら True を返す。
+    それ以外（ダイレクト/指定ユーザー限定など）なら False を返す。
     """
-    message_text = (dm_message or "").lower()
+    visibility = note.get('visibility', 'public')
+    allowed_visibilities = ['public', 'home', 'followers']
     
-    # ブロックキーワードのいずれかが含まれているかチェック
-    for keyword in BLOCK_KEYWORDS:
-        if keyword.lower() in message_text:
-            try:
-                print(f"🚨 ブロック対象キーワード検知: '{keyword}'")
-                print(f"   送り主: @{sender_username} ({sender_id})")
-                
-                # ブロック処理
-                try:
-                    await mk_client.request('blocking/create', {'userId': sender_id})
-                    print(f"   ✅ ブロック成功")
-                except Exception as block_err:
-                    print(f"   ⚠️ ブロック失敗: {str(block_err)}")
-                
-                # ミュート処理
-                try:
-                    await mk_client.request('muting/create', {'userId': sender_id})
-                    print(f"   ✅ ミュート成功")
-                except Exception as mute_err:
-                    print(f"   ⚠️ ミュート失敗: {str(mute_err)}")
-                
-                return True
-            
-            except Exception as e:
-                print(f"   ❌ エラー発生: {str(e)}")
-                return True  # エラーでも念のため無視する
+    if visibility not in allowed_visibilities:
+        print(f"⚠️ 公開範囲が対象外: {visibility} → スキップします")
+        return False
     
-    return False
-
+    return True
 
 # ================================
 # 🤝 フォロバ & リムバ
@@ -412,14 +376,9 @@ async def handle_mentions(mk_client, me):
         if reply_count >= 4:
             break
         
-        sender_id = note.get('user', {}).get('id')
-        sender_username = note.get('user', {}).get('username')
-        user_input = (note.get('text') or "").replace(f"@{me.get('username')}", "").strip()
-        
-        if await check_and_handle_dm_spam(mk_client, user_input, sender_id, sender_username):
-            print(f"   → このメンションをスキップします")
+        if not await check_visibility(note):
             continue
-            
+        
         reply_text = ""
         
         if note.get('user', {}).get('isBot') or note.get('user', {}).get('id') == me.get('id') or note.get('myReplyId') or (note.get('repliesCount') and note.get('repliesCount') > 0):
