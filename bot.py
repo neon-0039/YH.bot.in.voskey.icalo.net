@@ -318,6 +318,59 @@ async def ask_gemini(prompt):
     return get_random_error()
 
 # ================================
+# 🛡️ DM受信時のスパム/有害ワード検知とブロック処理
+# ================================
+# ⚠️ ここに追加: ブロック・ミュートしたいキーワードを追加してください
+# 形式: 大文字小文字を区別しません
+BLOCK_KEYWORDS = [
+    "個人情報を漏洩",
+    "反日勢力",
+    "集団ストーカー",
+    "〇害",
+    "カルト",
+    "逮捕されろ",
+    # さらに追加する場合は上に同じ形式で続けてください
+]
+
+async def check_and_handle_dm_spam(mk_client, dm_message, sender_id, sender_username):
+    """
+    DMの内容をチェックして、ブロック対象キーワードが含まれていたら
+    送り主をブロック・ミュートしてTrue を返す。
+    含まれていなかったらFalseを返す。
+    """
+    message_text = (dm_message or "").lower()
+    
+    # ブロックキーワードのいずれかが含まれているかチェック
+    for keyword in BLOCK_KEYWORDS:
+        if keyword.lower() in message_text:
+            try:
+                print(f"🚨 ブロック対象キーワード検知: '{keyword}'")
+                print(f"   送り主: @{sender_username} ({sender_id})")
+                
+                # ブロック処理
+                try:
+                    await mk_client.request('blocking/create', {'userId': sender_id})
+                    print(f"   ✅ ブロック成功")
+                except Exception as block_err:
+                    print(f"   ⚠️ ブロック失敗: {str(block_err)}")
+                
+                # ミュート処理
+                try:
+                    await mk_client.request('muting/create', {'userId': sender_id})
+                    print(f"   ✅ ミュート成功")
+                except Exception as mute_err:
+                    print(f"   ⚠️ ミュート失敗: {str(mute_err)}")
+                
+                return True
+            
+            except Exception as e:
+                print(f"   ❌ エラー発生: {str(e)}")
+                return True  # エラーでも念のため無視する
+    
+    return False
+
+
+# ================================
 # 🤝 フォロバ & リムバ
 # ================================
 async def handle_follow_control(mk_client, my_id):
@@ -349,9 +402,6 @@ async def handle_follow_control(mk_client, my_id):
     except Exception as e:
         print("フォロー整理処理でエラーが発生しましたが、続行します。")
 
-# ================================
-# 💬 メンション処理
-# ================================
 async def handle_mentions(mk_client, me):
     print("メンション確認中...")
     
@@ -362,6 +412,14 @@ async def handle_mentions(mk_client, me):
         if reply_count >= 4:
             break
         
+        sender_id = note.get('user', {}).get('id')
+        sender_username = note.get('user', {}).get('username')
+        user_input = (note.get('text') or "").replace(f"@{me.get('username')}", "").strip()
+        
+        if await check_and_handle_dm_spam(mk_client, user_input, sender_id, sender_username):
+            print(f"   → このメンションをスキップします")
+            continue
+            
         reply_text = ""
         
         if note.get('user', {}).get('isBot') or note.get('user', {}).get('id') == me.get('id') or note.get('myReplyId') or (note.get('repliesCount') and note.get('repliesCount') > 0):
@@ -1026,109 +1084,138 @@ def clean_brain(brain):
 # ================================
 def generate_markov(words, brain):
     """
-    2-gram 実装:
-    - markov_dict: key = 'w1\\x1fw2' -> [w3, ...]
-    - brain: 2-gram の同一フォーマットで期待される（load/saveでバージョン管理）
+    2-gram を基盤にしつつ、生成時に内部で 1-gram (直前1語) と 2-gram (直前2語) を
+    約 7:3 の比率で切り替えて使う実装。
+
+    - markov_dict: key = 'w1\\x1fw2' -> [w3,...]  (2-gram 仮辞書)
+    - markov1: key = 'w2' -> [w3,...]            (1-gram 集約, 仮辞書から作成)
+    - brain: 保存は従来の 2-gram ('w1\\x1fw2' keys) のまま
+    - brain1: brain を集約して作る 1-gram 相当の map（読み込み/保存は変更しない）
     """
     if not words or len(words) < 3:
         return "（材料がありません）"
-    
+
     def pick_next_word_from_list(word_list):
         if not word_list:
             return ""
-        
         candidate = random.choice(word_list)
-        
         if is_symbol(candidate) and random.random() < 0.6:
             candidate = random.choice(word_list)
-        
         attempts = 0
-        # NGワードや不適切単語を避ける試行
         while NG_PATTERN.search(candidate) and attempts < 5:
             candidate = random.choice(word_list)
             attempts += 1
-        
         return candidate
-    
-    # markov_dict を 2-gram で構築（NGやURL・記号を含むトリプレットは除外）
-    markov_dict = {}
+
+    # --------
+    # 2-gram の仮辞書を作る（従来どおり、NG/URL/記号のトリプレットは除外）
+    markov2 = {}
     for i in range(len(words) - 2):
         a, b, c = words[i], words[i+1], words[i+2]
-        # 投稿レベルなら既にフィルタ済みだが念のためトークン単位でもチェック
         if NG_PATTERN.search(a) or NG_PATTERN.search(b) or NG_PATTERN.search(c):
             continue
         if contains_http_scheme(a) or contains_http_scheme(b) or contains_http_scheme(c):
             continue
         if is_symbol(a) or is_symbol(b) or is_symbol(c):
             continue
-        k = f"{a}\x1f{b}"
-        if k not in markov_dict:
-            markov_dict[k] = []
-        markov_dict[k].append(c)
-    
+        key2 = f"{a}\x1f{b}"
+        markov2.setdefault(key2, []).append(c)
+
+    # --------
+    # 1-gram 集約を内部で作る（markov2 -> markov1）
+    markov1 = {}
+    for key2, lst in markov2.items():
+        # key2 = "w1\x1fw2" -> w2 をキーに集約
+        try:
+            _, w2 = key2.split('\x1f', 1)
+        except ValueError:
+            continue
+        markov1.setdefault(w2, []).extend(lst)
+
+    # --------
+    # brain からも内部的に 1-gram 集約を作る（brain keys の形式は "w1\x1fw2"）
+    brain1 = {}
+    for key2, lst in brain.items():
+        # key2 期待: "w1\x1fw2"
+        try:
+            _, w2 = key2.split('\x1f', 1)
+        except Exception:
+            continue
+        brain1.setdefault(w2, []).extend(lst)
+
+    # --------
     # 目標文字数をランダムに決定（20~40文字）
     target_length = random.randint(20, 40)
-    
-    # 開始ペアをランダムに選択（候補があるキーから選んだ方が良い）
-    if markov_dict:
-        start_key = random.choice(list(markov_dict.keys()))
+
+    # 開始ペアの選び方：まず markov2 に候補があればそこから、なければ words からランダムスタート
+    if markov2:
+        start_key = random.choice(list(markov2.keys()))
         w_prev, w_curr = start_key.split('\x1f')
         generated = w_prev + w_curr
     else:
-        # フォールバック：words からランダムスタート（安全に）
         start_idx = random.randint(0, len(words) - 2)
         w_prev = words[start_idx]
         w_curr = words[start_idx + 1]
         generated = w_prev + w_curr
-    
+
+    # ここで混合比を設定（1-gram : 2-gram = 7 : 3）
+    PROB_1GRAM = 0.7
+
     # 目標文字数に達するまでループ
     while len(generated) < target_length:
-        key = f"{w_prev}\x1f{w_curr}"
         found_next = ""
-        use_brain = random.random() < 0.7
-        
-        # brainは「直前2語のキー」で保存されている前提。意図を維持：現在のcurrent_word(=w_curr)が助詞などのときにbrainを優先
-        if use_brain and (w_curr in particles) and (key in brain):
-            candidates = brain.get(key, [])
-            if candidates:
-                found_next = random.choice(candidates)
-        
-        # brainが使えないまたは候補が無い場合は markov_dict を参照
-        if not found_next and key in markov_dict:
-            found_next = pick_next_word_from_list(markov_dict[key])
-        
-        # どちらもダメなら単語リスト全体から拾う（フォールバック）
+        mode_roll = random.random()
+
+        if mode_roll < PROB_1GRAM:
+            # --- 1-gram モード ---
+            # 1) brain1 を優先 (存在すれば)
+            if w_curr in brain1 and brain1.get(w_curr):
+                found_next = random.choice(brain1[w_curr])
+            # 2) なければ markov1 を参照
+            if not found_next and w_curr in markov1:
+                found_next = pick_next_word_from_list(markov1[w_curr])
+        else:
+            # --- 2-gram モード ---
+            key2 = f"{w_prev}\x1f{w_curr}"
+            # 1) brain(2-gram) を優先（従来の「助詞のとき brain 優先」ロジックは保持したい場合はここで追加可）
+            if key2 in brain and brain.get(key2):
+                found_next = random.choice(brain[key2])
+            # 2) なければ markov2 を参照
+            if not found_next and key2 in markov2:
+                found_next = pick_next_word_from_list(markov2[key2])
+
+        # フォールバック：どちらもダメなら words 全体から（ただし NG 除外は pick_next_word_from_list が行う）
         if not found_next:
             found_next = pick_next_word_from_list(words)
-        
-        # 長い連続ひらがな・カタカナをスキップ
+
+        # 長い連続ひらがな・カタカナをスキップ（既存ロジック）
         if re.match(r'^[\u3040-\u309F]{8,}$|^[\u30A0-\u30FF]{8,}$', found_next):
-            # 別候補を試す
             attempts = 0
             while attempts < 3 and re.match(r'^[\u3040-\u309F]{8,}$|^[\u30A0-\u30FF]{8,}$', found_next):
                 found_next = pick_next_word_from_list(words)
                 attempts += 1
-            # それでもダメなら許容して次へ
-        
+            # それでもダメならそのまま採用（既存と同様）
+
         # 追加
         generated += found_next
-        
-        # 次の状態にシフト
+
+        # 状態遷移（2-gram 状態）
         w_prev, w_curr = w_curr, found_next
-        
+
         # 終端文字で自然に終了
         if any(found_next.endswith(s) for s in ["。", "！", "？", "w", "…"]):
             break
-    
+
     output_text = generated or "（言葉の断片が見つかりませんでした）"
-    
-    # テキスト後処理（既存の処理を維持）
+
+    # 最終クリーニング（既存処理に strip_unicode_escapes 等があればそのまま残す）
     output_text = re.sub(r':[^:]*:', '', output_text)
     output_text = output_text.replace(' ', '').replace('　', '')
     output_text = re.sub(r'<[^>]*>', '', output_text)
-    output_text = re.sub(r'\\u[0-9a-fA-F]{4}', '', output_text)
+    # もし \u 系の生文字列があれば念のため除去（既存実装があれば整合）
+    output_text = re.sub(r'\\u[0-9a-fA-F]{4,8}', '', output_text)
     output_text = output_text.replace('\\', '').strip()
-    
+
     return output_text
 
 # ================================
