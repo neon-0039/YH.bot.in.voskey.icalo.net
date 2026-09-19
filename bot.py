@@ -1118,7 +1118,7 @@ def generate_markov(words, brain):
         generated = w_prev + w_curr
 
     # ここで混合比を設定（1-gram : 2-gram = 7 : 3）
-    PROB_1GRAM = 0.7
+    PROB_1GRAM = 0.4
 
     # 目標文字数に達するまでループ
     while len(generated) < target_length:
